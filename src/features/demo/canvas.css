@@ -1,0 +1,18 @@
+/* Archetype canvas layout — uses theme tokens when present */
+.canvas-root { min-height: 100vh; background: var(--color-bg, #f5f5f5); color: var(--color-text, #111); font-family: var(--font-sans, system-ui, sans-serif); }
+.canvas-eyebrow { margin: 0 0 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: var(--color-muted, #666); text-transform: uppercase; }
+.canvas-btn { border: 0; border-radius: var(--radius-sm, 8px); padding: 10px 14px; background: var(--color-primary, #111); color: var(--color-primary-text, #fff); cursor: pointer; font: inherit; }
+.canvas-btn.ghost { background: transparent; color: var(--color-text, #111); border: 1px solid var(--color-border, #ddd); }
+.canvas-panel { background: var(--color-surface, #fff); border: 1px solid var(--color-border, #e5e5e5); border-radius: var(--radius-md, 12px); }
+.canvas-muted { color: var(--color-muted, #666); }
+
+.admin-layout { display: grid; grid-template-columns: 220px 1fr 320px; min-height: 100vh; }
+.admin-side { padding: 20px; border-right: 1px solid var(--color-border, #e5e5e5); background: var(--color-surface, #fff); }
+.admin-side nav { display: grid; gap: 6px; margin-top: 24px; }
+.admin-side button { text-align: left; border: 0; background: transparent; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: inherit; font: inherit; }
+.admin-side button.active { background: var(--color-bg, #f0f0f0); font-weight: 700; }
+.admin-main { padding: 24px; }
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th, .admin-table td { text-align: left; padding: 12px; border-bottom: 1px solid var(--color-border, #e5e5e5); }
+.admin-detail { padding: 24px; border-left: 1px solid var(--color-border, #e5e5e5); background: var(--color-surface, #fff); }
+@media (max-width: 900px) { .admin-layout { grid-template-columns: 1fr; } .admin-detail { border-left: 0; border-top: 1px solid var(--color-border, #e5e5e5); } }

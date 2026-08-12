@@ -1,0 +1,29 @@
+node_modules
+dist
+.env
+.env.local
+.DS_Store
+
+# Local process docs (keep on disk, don't publish)
+# Developer workflow packs - not for public/recruiter repos
+docs/
+PROJECT_RULES.md
+GENERATED.md
+archetype/
+
+# Developer workflow packs - not for public/recruiter repos
+docs/
+PROJECT_RULES.md
+GENERATED.md
+archetype/
+
+# Private AI - companion/chat context stays local
+CLAUDE.md
+AGENTS.local.md
+.claude/
+.ai/
+
+CLAUDE.md
+AGENTS.local.md
+.claude/
+.ai/
