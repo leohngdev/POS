@@ -10,6 +10,9 @@ import {
   openCheckForTable,
   checkFloorStatus,
   verifyPin,
+  checkTotal,
+  updateVenueTaxes,
+  clampRate,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -131,5 +134,22 @@ describe("Kitchen bump", () => {
     expect(checkFloorStatus(check, bumped.state.chits)).toBe("ready");
     const paid = payCheck(bumped.state, check.id, "card");
     expect(checkFloorStatus(paid.state.checks[0], paid.state.chits)).toBe("paid");
+  });
+});
+
+describe("Venue tax", () => {
+  const check = { lines };
+
+  it("leaves total at subtotal when GST and surcharge are off", () => {
+    expect(checkTotal(check, createInitialState().venue)).toBe(24);
+  });
+
+  it("adds GST when enabled", () => {
+    const venue = updateVenueTaxes(createInitialState(), { gstEnabled: true, gstRate: 0.1 }).venue;
+    expect(checkTotal(check, venue)).toBe(26.4);
+  });
+
+  it("ignores NaN rates", () => {
+    expect(clampRate(Number("nope"), 0.1)).toBe(0.1);
   });
 });

@@ -1,4 +1,4 @@
-/** Venue stubs for Sprint 1. PIN is a local till gate, not a secret store. */
+/** Venue stubs. PIN is a local till gate, not a secret store. Tax flags are the Sprint 2 defaults. */
 export const VENUE = {
   name: "POS",
   pin: "1234",

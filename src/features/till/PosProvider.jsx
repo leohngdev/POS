@@ -1,11 +1,13 @@
-import { createContext, useContext, useReducer } from "react";
+import { createContext, useContext, useEffect, useMemo, useReducer } from "react";
 import {
   createInitialState,
   send,
   payCheck,
   bumpChit,
   undoLastBump,
+  updateVenueTaxes,
 } from "../../services/pos";
+import { loadState, writeStore } from "../../services/persist";
 import { VENUE } from "../../services/venue";
 
 const PosContext = createContext(null);
@@ -23,12 +25,24 @@ function reducer(state, action) {
   }
 }
 
+function boot() {
+  if (typeof localStorage === "undefined") return createInitialState();
+  return loadState(createInitialState(), localStorage);
+}
+
 export function PosProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, null, createInitialState);
+  const [state, dispatch] = useReducer(reducer, null, boot);
+
+  useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+    writeStore(state, localStorage);
+  }, [state]);
+
+  const venue = useMemo(() => ({ ...VENUE, ...state.venue }), [state.venue]);
 
   const api = {
     state,
-    venue: VENUE,
+    venue,
     unlock(pin) {
       if (pin === VENUE.pin) dispatch({ type: "unlock-ok" });
       else dispatch({ type: "unlock-fail" });
@@ -37,7 +51,7 @@ export function PosProvider({ children }) {
       dispatch({ type: "replace", state: { ...state, unlocked: false, pinError: null } });
     },
     sendOrder(payload) {
-      const result = send({ state, venue: VENUE, now: Date.now(), ...payload });
+      const result = send({ state, venue, now: Date.now(), ...payload });
       if (result.ok) dispatch({ type: "replace", state: result.state });
       return result;
     },
@@ -55,6 +69,9 @@ export function PosProvider({ children }) {
       const result = undoLastBump(state);
       if (result.ok) dispatch({ type: "replace", state: result.state });
       return result;
+    },
+    setVenueTaxes(patch) {
+      dispatch({ type: "replace", state: updateVenueTaxes(state, patch) });
     },
   };
 

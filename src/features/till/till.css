@@ -331,6 +331,30 @@
 .till-timer.late { color: #9b2c1a; font-weight: 700; }
 .till-chit-lines { margin: 0; padding-left: 1.1em; font-size: 16px; }
 
+.till-settings {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 360px;
+}
+
+.till-setting {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.till-setting input[type="number"] {
+  font: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.till-setting input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
 @media (max-width: 900px) {
   .till-shell,
   .till-shell-kitchen {

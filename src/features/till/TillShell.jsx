@@ -3,6 +3,7 @@ import { DineInView } from "./DineInView";
 import { TakeawayView } from "./TakeawayView";
 import { TicketsView } from "./TicketsView";
 import { KitchenView } from "./KitchenView";
+import { SettingsView } from "./SettingsView";
 import { usePos } from "./PosProvider";
 
 const NAV = [
@@ -10,15 +11,16 @@ const NAV = [
   { id: "takeaway", label: "Takeaway" },
   { id: "tickets", label: "Tickets" },
   { id: "kitchen", label: "Kitchen" },
+  { id: "settings", label: "Settings" },
 ];
 
 export function TillShell() {
   const [nav, setNav] = useState("dine-in");
   const { lock } = usePos();
-  const kitchen = nav === "kitchen";
+  const wide = nav === "kitchen" || nav === "settings";
 
   return (
-    <div className={`till-root till-shell${kitchen ? " till-shell-kitchen" : ""}`}>
+    <div className={`till-root till-shell${wide ? " till-shell-kitchen" : ""}`}>
       <aside className="till-nav">
         <div className="till-brand">TILL</div>
         {NAV.map((item) => (
@@ -39,6 +41,7 @@ export function TillShell() {
       {nav === "takeaway" ? <TakeawayView /> : null}
       {nav === "tickets" ? <TicketsView /> : null}
       {nav === "kitchen" ? <KitchenView /> : null}
+      {nav === "settings" ? <SettingsView /> : null}
     </div>
   );
 }

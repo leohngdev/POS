@@ -1,3 +1,5 @@
+import { VENUE } from "./venue";
+
 function nextId(prefix, n) {
   return `${prefix}-${n}`;
 }
@@ -32,6 +34,30 @@ export function createInitialState() {
     nextChit: 1,
     nextTakeaway: 1,
     lastBumpedChitId: null,
+    venue: {
+      gstEnabled: VENUE.gstEnabled,
+      gstRate: VENUE.gstRate,
+      surchargeEnabled: VENUE.surchargeEnabled,
+      surchargeRate: VENUE.surchargeRate,
+    },
+  };
+}
+
+export function clampRate(n, fallback) {
+  if (typeof n !== "number" || Number.isNaN(n)) return fallback;
+  return Math.min(1, Math.max(0, n));
+}
+
+export function updateVenueTaxes(state, patch) {
+  const current = state.venue;
+  return {
+    ...state,
+    venue: {
+      gstEnabled: patch.gstEnabled ?? current.gstEnabled,
+      gstRate: clampRate(patch.gstRate, current.gstRate),
+      surchargeEnabled: patch.surchargeEnabled ?? current.surchargeEnabled,
+      surchargeRate: clampRate(patch.surchargeRate, current.surchargeRate),
+    },
   };
 }
 
