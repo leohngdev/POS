@@ -1,4 +1,5 @@
 node_modules
+.pos-snapshot.json
 dist
 .env
 .env.local

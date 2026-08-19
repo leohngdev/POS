@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { usePos } from "./PosProvider";
 
+function isLoopbackHost(hostname) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
 export function SettingsView() {
-  const { venue, setVenueTaxes } = usePos();
+  const { venue, setVenueTaxes, syncStatus } = usePos();
   const [copied, setCopied] = useState(null);
   const guestHome = `${window.location.origin}${window.location.pathname}#/order`;
   const guestTable = `${guestHome}/04`;
+  const loopback = isLoopbackHost(window.location.hostname);
 
   function setPercent(field, raw) {
     const n = Number(raw);
@@ -26,6 +31,9 @@ export function SettingsView() {
     <main className="till-workspace">
       <h1>Settings</h1>
       <p className="till-muted">This venue only. Totals on the bill follow these flags. PIN stays 1234 in code this sprint.</p>
+      <p className="till-muted">
+        Sync: {syncStatus === "live" ? "venue live — phone and till share checks." : "this device only — start `npm run dev` so /api/snapshot is up."}
+      </p>
       <section className="till-settings">
         <label className="till-setting">
           <input
@@ -68,8 +76,10 @@ export function SettingsView() {
       </section>
       <h2>Guest order</h2>
       <p className="till-muted">
-        Same origin as this till. Open the link on a second tab (or a phone on the same computer) to dogfood.
-        A real phone vs iPad will not share this store until there is a server.
+        Phone and till must open the same origin (this Vite host). `npm run dev` listens on the LAN.
+        {loopback
+          ? " This tab is localhost — a real phone cannot reach it. Open the till at this PC’s LAN address shown in the Vite terminal, then copy the link again."
+          : " Copy a link below onto the guest phone on the same Wi‑Fi."}
       </p>
       <section className="till-settings">
         <label className="till-setting">

@@ -35,17 +35,18 @@ export function DineInView() {
   }
 
   function send() {
-    const result = sendOrder({
+    sendOrder({
       channel: "dine-in",
       tableId,
       lines,
+    }).then((result) => {
+      if (!result.ok) {
+        setNotice(result.error);
+        return;
+      }
+      setDraft({});
+      setNotice("Sent to kitchen");
     });
-    if (!result.ok) {
-      setNotice(result.error);
-      return;
-    }
-    setDraft({});
-    setNotice("Sent to kitchen");
   }
 
   return (

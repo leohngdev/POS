@@ -18,8 +18,8 @@ export function TakeawayView() {
   const queueNumber = nextQueueNumber(state.nextTakeaway);
   const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
 
-  function send() {
-    const result = sendOrder({
+  async function send() {
+    const result = await sendOrder({
       channel: "takeaway",
       tableId: null,
       queueNumber,

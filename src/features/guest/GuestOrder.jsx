@@ -18,9 +18,9 @@ export function GuestOrder({ initialTable }) {
   const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
 
-  function pick(id) {
-    if (tableId && tableId !== id) release(tableId);
-    const result = claim(id);
+  async function pick(id) {
+    if (tableId && tableId !== id) await release(tableId);
+    const result = await claim(id);
     if (!result.ok) {
       setNotice(result.error);
       return;
@@ -58,15 +58,15 @@ export function GuestOrder({ initialTable }) {
     pick(id);
   }
 
-  function changeTable() {
-    if (tableId) release(tableId);
+  async function changeTable() {
+    if (tableId) await release(tableId);
     setTableId(null);
     setDraft({});
     setNotice(null);
   }
 
-  function send() {
-    const result = sendOrder({ channel: "dine-in", tableId, lines, requireClaim: true });
+  async function send() {
+    const result = await sendOrder({ channel: "dine-in", tableId, lines, requireClaim: true });
     if (!result.ok) {
       setNotice(result.error);
       if (!hasGuestClaim(result.state, tableId)) {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useReducer } from "react";
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   createInitialState,
   send,
@@ -10,8 +10,9 @@ import {
   rejectClaim,
   releaseClaim,
 } from "../../services/pos";
-import { loadState, writeStore, STORAGE_KEY } from "../../services/persist";
+import { loadState, writeStore, STORAGE_KEY, toSnapshot } from "../../services/persist";
 import { VENUE } from "../../services/venue";
+import { applyOnVenue, hasLocalService, POLL_MS, pullSnapshot, pushSnapshot, sessionize } from "../../services/sync";
 
 const PosContext = createContext(null);
 
@@ -41,6 +42,9 @@ function fromStore(session) {
 
 export function PosProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, boot);
+  const [syncStatus, setSyncStatus] = useState("local");
+  const revRef = useRef(0);
+  const mutatingRef = useRef(false);
 
   useEffect(() => {
     if (typeof localStorage === "undefined") return;
@@ -57,57 +61,114 @@ export function PosProvider({ children }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function tick() {
+      if (mutatingRef.current) return;
+      const pulled = await pullSnapshot();
+      if (cancelled || mutatingRef.current) return;
+      if (!pulled.ok) {
+        setSyncStatus("local");
+        return;
+      }
+      setSyncStatus("live");
+      if (!pulled.snapshot) {
+        const local = fromStore(state);
+        if (hasLocalService(local) && pulled.rev === 0) {
+          mutatingRef.current = true;
+          const seeded = await pushSnapshot(0, toSnapshot(local));
+          mutatingRef.current = false;
+          if (cancelled) return;
+          if (seeded.ok) revRef.current = seeded.rev;
+        }
+        return;
+      }
+      if (pulled.rev <= revRef.current) return;
+      revRef.current = pulled.rev;
+      dispatch({ type: "hydrate-remote", state: sessionize(pulled.snapshot, state) });
+    }
+
+    tick();
+    const id = setInterval(tick, POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
   const venue = useMemo(() => ({ ...VENUE, ...state.venue }), [state.venue]);
 
-  function commit(result, latest) {
-    dispatch({ type: "replace", state: result.ok ? result.state : latest });
-    return result;
+  async function withSync(apply) {
+    mutatingRef.current = true;
+    try {
+      const applied = await applyOnVenue(apply, { ...state, rev: revRef.current }, fromStore(state), {
+        pull: pullSnapshot,
+        push: pushSnapshot,
+      });
+      revRef.current = applied.rev;
+      setSyncStatus(applied.status);
+      dispatch({ type: "replace", state: applied.next });
+      return applied.result;
+    } finally {
+      mutatingRef.current = false;
+    }
   }
 
   const api = {
     state,
     venue,
+    syncStatus,
     unlock(pin) {
       if (pin !== VENUE.pin) {
         dispatch({ type: "unlock-fail" });
         return;
       }
-      dispatch({ type: "replace", state: { ...fromStore(state), unlocked: true, pinError: null } });
+      mutatingRef.current = true;
+      pullSnapshot()
+        .then((pulled) => {
+          let base = fromStore(state);
+          if (pulled.ok && pulled.snapshot) {
+            base = sessionize(pulled.snapshot, state);
+            revRef.current = pulled.rev;
+            setSyncStatus("live");
+          } else if (pulled.ok) {
+            setSyncStatus("live");
+          } else {
+            setSyncStatus("local");
+          }
+          dispatch({ type: "replace", state: { ...base, unlocked: true, pinError: null } });
+        })
+        .finally(() => {
+          mutatingRef.current = false;
+        });
     },
     lock() {
       dispatch({ type: "replace", state: { ...fromStore(state), unlocked: false, pinError: null } });
     },
     sendOrder(payload) {
-      const latest = fromStore(state);
-      const venueNow = { ...VENUE, ...latest.venue };
-      return commit(send({ state: latest, venue: venueNow, now: Date.now(), ...payload }), latest);
+      return withSync((latest) => send({ state: latest, venue: { ...VENUE, ...latest.venue }, now: Date.now(), ...payload }));
     },
     pay(checkId, paidVia) {
-      const latest = fromStore(state);
-      return commit(payCheck(latest, checkId, paidVia), latest);
+      return withSync((latest) => payCheck(latest, checkId, paidVia));
     },
     bump(chitId) {
-      const latest = fromStore(state);
-      return commit(bumpChit(latest, chitId, Date.now()), latest);
+      return withSync((latest) => bumpChit(latest, chitId, Date.now()));
     },
     undoBump() {
-      const latest = fromStore(state);
-      return commit(undoLastBump(latest), latest);
+      return withSync((latest) => undoLastBump(latest));
     },
     setVenueTaxes(patch) {
-      dispatch({ type: "replace", state: updateVenueTaxes(fromStore(state), patch) });
+      return withSync((latest) => ({ ok: true, error: null, state: updateVenueTaxes(latest, patch) }));
     },
     claim(tableId) {
-      const latest = fromStore(state);
-      return commit(claimTable(latest, tableId, VENUE.tables, Date.now()), latest);
+      return withSync((latest) => claimTable(latest, tableId, VENUE.tables, Date.now()));
     },
     release(tableId) {
-      const latest = fromStore(state);
-      return commit(releaseClaim(latest, tableId), latest);
+      return withSync((latest) => releaseClaim(latest, tableId));
     },
     reject(tableId) {
-      const latest = fromStore(state);
-      return commit(rejectClaim(latest, tableId), latest);
+      return withSync((latest) => rejectClaim(latest, tableId));
     },
   };
 

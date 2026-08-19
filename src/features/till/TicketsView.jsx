@@ -32,9 +32,9 @@ export function TicketsView() {
   const selected = state.checks.find((c) => c.id === selectedId) ?? null;
   const selectedFloor = selected ? checkFloorStatus(selected, state.chits) : null;
 
-  function settle(via) {
+  async function settle(via) {
     if (!selected || selected.status === "paid") return;
-    const result = pay(selected.id, via);
+    const result = await pay(selected.id, via);
     if (!result.ok) {
       setNotice(result.error);
       return;
