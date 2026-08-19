@@ -215,6 +215,13 @@ export function activeChits(state) {
     .sort((a, b) => a.sentAt - b.sentAt);
 }
 
+/** FOH row for a check: cooking while kitchen still has a chit, else ready to pay. */
+export function checkFloorStatus(check, chits) {
+  if (check.status === "paid") return "paid";
+  const cooking = chits.some((c) => c.checkId === check.id && c.status === "active");
+  return cooking ? "cooking" : "ready";
+}
+
 export function checkLabel(check) {
   if (check.channel === "takeaway") {
     return check.guestName ? `${check.queueNumber} · ${check.guestName}` : check.queueNumber;

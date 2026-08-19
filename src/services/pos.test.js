@@ -8,6 +8,7 @@ import {
   undoLastBump,
   activeChits,
   openCheckForTable,
+  checkFloorStatus,
   verifyPin,
 } from "./pos";
 import { VENUE } from "./venue";
@@ -113,5 +114,22 @@ describe("Kitchen bump", () => {
     expect(activeChits(bumped.state)).toHaveLength(0);
     const undone = undoLastBump(bumped.state);
     expect(activeChits(undone.state)).toHaveLength(1);
+  });
+
+  it("moves FOH from cooking to ready after the last chit is bumped", () => {
+    const ordered = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const check = ordered.state.checks[0];
+    expect(checkFloorStatus(check, ordered.state.chits)).toBe("cooking");
+    const bumped = bumpChit(ordered.state, ordered.state.chits[0].id, 5);
+    expect(checkFloorStatus(check, bumped.state.chits)).toBe("ready");
+    const paid = payCheck(bumped.state, check.id, "card");
+    expect(checkFloorStatus(paid.state.checks[0], paid.state.chits)).toBe("paid");
   });
 });

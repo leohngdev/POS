@@ -3,6 +3,7 @@ import { DineInView } from "./DineInView";
 import { TakeawayView } from "./TakeawayView";
 import { TicketsView } from "./TicketsView";
 import { KitchenView } from "./KitchenView";
+import { usePos } from "./PosProvider";
 
 const NAV = [
   { id: "dine-in", label: "Dine in" },
@@ -13,6 +14,7 @@ const NAV = [
 
 export function TillShell() {
   const [nav, setNav] = useState("dine-in");
+  const { lock } = usePos();
   const kitchen = nav === "kitchen";
 
   return (
@@ -29,6 +31,9 @@ export function TillShell() {
             {item.label}
           </button>
         ))}
+        <button type="button" className="till-ghost till-lock" onClick={lock}>
+          Lock
+        </button>
       </aside>
       {nav === "dine-in" ? <DineInView /> : null}
       {nav === "takeaway" ? <TakeawayView /> : null}

@@ -1,16 +1,36 @@
 import { useState } from "react";
-import { checkLabel, checkTotal, money } from "../../services/pos";
+import { checkFloorStatus, checkLabel, checkTotal, money } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { BillPanel } from "./BillPanel";
+
+function TicketCard({ check, venue, chits, selected, onSelect }) {
+  const floor = checkFloorStatus(check, chits);
+  const label = floor === "paid" ? "Paid" : floor === "cooking" ? "Cooking" : "Pay now";
+  return (
+    <button
+      type="button"
+      className={`till-ticket${selected ? " on" : ""}${floor === "paid" ? " paid" : ""}`}
+      onClick={onSelect}
+    >
+      <strong>{checkLabel(check)}</strong>
+      <span>
+        {label} · {money(checkTotal(check, venue))}
+      </span>
+      <span className="till-chip">{label}</span>
+    </button>
+  );
+}
 
 export function TicketsView() {
   const { state, venue, pay } = usePos();
   const [selectedId, setSelectedId] = useState(null);
   const [notice, setNotice] = useState(null);
 
-  const unpaid = state.checks.filter((c) => c.status === "open");
+  const cooking = state.checks.filter((c) => checkFloorStatus(c, state.chits) === "cooking");
+  const ready = state.checks.filter((c) => checkFloorStatus(c, state.chits) === "ready");
   const paid = state.checks.filter((c) => c.status === "paid");
   const selected = state.checks.find((c) => c.id === selectedId) ?? null;
+  const selectedFloor = selected ? checkFloorStatus(selected, state.chits) : null;
 
   function settle(via) {
     if (!selected || selected.status === "paid") return;
@@ -22,6 +42,11 @@ export function TicketsView() {
     setNotice(`Marked ${via}`);
   }
 
+  function pick(id) {
+    setSelectedId(id);
+    setNotice(null);
+  }
+
   return (
     <>
       <main className="till-workspace">
@@ -29,38 +54,46 @@ export function TicketsView() {
           <p className="till-empty">No open tickets</p>
         ) : (
           <>
+            <h2>In progress</h2>
+            <div className="till-ticket-row">
+              {cooking.length === 0 ? <p className="till-muted">Kitchen is clear</p> : null}
+              {cooking.map((check) => (
+                <TicketCard
+                  key={check.id}
+                  check={check}
+                  venue={venue}
+                  chits={state.chits}
+                  selected={selectedId === check.id}
+                  onSelect={() => pick(check.id)}
+                />
+              ))}
+            </div>
             <h2>To pay</h2>
             <div className="till-ticket-row">
-              {unpaid.length === 0 ? <p className="till-muted">Nothing unpaid</p> : null}
-              {unpaid.map((check) => (
-                <button
+              {ready.length === 0 ? <p className="till-muted">Nothing waiting on payment</p> : null}
+              {ready.map((check) => (
+                <TicketCard
                   key={check.id}
-                  type="button"
-                  className={selectedId === check.id ? "till-ticket on" : "till-ticket"}
-                  onClick={() => {
-                    setSelectedId(check.id);
-                    setNotice(null);
-                  }}
-                >
-                  <strong>{checkLabel(check)}</strong>
-                  <span>Unpaid · {money(checkTotal(check, venue))}</span>
-                  <span className="till-chip">Pay now</span>
-                </button>
+                  check={check}
+                  venue={venue}
+                  chits={state.chits}
+                  selected={selectedId === check.id}
+                  onSelect={() => pick(check.id)}
+                />
               ))}
             </div>
             <h2>Paid</h2>
             <div className="till-ticket-row">
               {paid.length === 0 ? <p className="till-muted">None yet</p> : null}
               {paid.map((check) => (
-                <button
+                <TicketCard
                   key={check.id}
-                  type="button"
-                  className={selectedId === check.id ? "till-ticket paid on" : "till-ticket paid"}
-                  onClick={() => setSelectedId(check.id)}
-                >
-                  <strong>{checkLabel(check)}</strong>
-                  <span>Paid · {money(checkTotal(check, venue))}</span>
-                </button>
+                  check={check}
+                  venue={venue}
+                  chits={state.chits}
+                  selected={selectedId === check.id}
+                  onSelect={() => pick(check.id)}
+                />
               ))}
             </div>
           </>
@@ -71,7 +104,15 @@ export function TicketsView() {
           title={checkLabel(selected)}
           lines={selected.lines}
           venue={venue}
-          extra={<p className="till-muted">{selected.status === "paid" ? `Paid · ${selected.paidVia}` : "Unpaid"}</p>}
+          extra={
+            <p className="till-muted">
+              {selectedFloor === "paid"
+                ? `Paid · ${selected.paidVia}`
+                : selectedFloor === "cooking"
+                  ? "Kitchen still has a chit"
+                  : "Ready to pay"}
+            </p>
+          }
         >
           {notice ? <p className="till-ok">{notice}</p> : null}
           {selected.status === "open" ? (

@@ -33,6 +33,9 @@ export function PosProvider({ children }) {
       if (pin === VENUE.pin) dispatch({ type: "unlock-ok" });
       else dispatch({ type: "unlock-fail" });
     },
+    lock() {
+      dispatch({ type: "replace", state: { ...state, unlocked: false, pinError: null } });
+    },
     sendOrder(payload) {
       const result = send({ state, venue: VENUE, now: Date.now(), ...payload });
       if (result.ok) dispatch({ type: "replace", state: result.state });
