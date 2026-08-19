@@ -6,20 +6,23 @@ import {
   bumpChit,
   undoLastBump,
   updateVenueTaxes,
+  claimTable,
+  rejectClaim,
+  releaseClaim,
 } from "../../services/pos";
-import { loadState, writeStore } from "../../services/persist";
+import { loadState, writeStore, STORAGE_KEY } from "../../services/persist";
 import { VENUE } from "../../services/venue";
 
 const PosContext = createContext(null);
 
 function reducer(state, action) {
   switch (action.type) {
-    case "unlock-ok":
-      return { ...state, unlocked: true, pinError: null };
     case "unlock-fail":
       return { ...state, pinError: "Wrong PIN" };
     case "replace":
       return action.state;
+    case "hydrate-remote":
+      return { ...action.state, unlocked: state.unlocked, pinError: state.pinError };
     default:
       return state;
   }
@@ -30,6 +33,12 @@ function boot() {
   return loadState(createInitialState(), localStorage);
 }
 
+function fromStore(session) {
+  if (typeof localStorage === "undefined") return session;
+  const loaded = loadState(createInitialState(), localStorage);
+  return { ...loaded, unlocked: session.unlocked, pinError: session.pinError };
+}
+
 export function PosProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, boot);
 
@@ -38,40 +47,67 @@ export function PosProvider({ children }) {
     writeStore(state, localStorage);
   }, [state]);
 
+  useEffect(() => {
+    function onStorage(event) {
+      if (event.key !== STORAGE_KEY) return;
+      const next = loadState(createInitialState(), localStorage);
+      dispatch({ type: "hydrate-remote", state: next });
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   const venue = useMemo(() => ({ ...VENUE, ...state.venue }), [state.venue]);
+
+  function commit(result, latest) {
+    dispatch({ type: "replace", state: result.ok ? result.state : latest });
+    return result;
+  }
 
   const api = {
     state,
     venue,
     unlock(pin) {
-      if (pin === VENUE.pin) dispatch({ type: "unlock-ok" });
-      else dispatch({ type: "unlock-fail" });
+      if (pin !== VENUE.pin) {
+        dispatch({ type: "unlock-fail" });
+        return;
+      }
+      dispatch({ type: "replace", state: { ...fromStore(state), unlocked: true, pinError: null } });
     },
     lock() {
-      dispatch({ type: "replace", state: { ...state, unlocked: false, pinError: null } });
+      dispatch({ type: "replace", state: { ...fromStore(state), unlocked: false, pinError: null } });
     },
     sendOrder(payload) {
-      const result = send({ state, venue, now: Date.now(), ...payload });
-      if (result.ok) dispatch({ type: "replace", state: result.state });
-      return result;
+      const latest = fromStore(state);
+      const venueNow = { ...VENUE, ...latest.venue };
+      return commit(send({ state: latest, venue: venueNow, now: Date.now(), ...payload }), latest);
     },
     pay(checkId, paidVia) {
-      const result = payCheck(state, checkId, paidVia);
-      if (result.ok) dispatch({ type: "replace", state: result.state });
-      return result;
+      const latest = fromStore(state);
+      return commit(payCheck(latest, checkId, paidVia), latest);
     },
     bump(chitId) {
-      const result = bumpChit(state, chitId, Date.now());
-      if (result.ok) dispatch({ type: "replace", state: result.state });
-      return result;
+      const latest = fromStore(state);
+      return commit(bumpChit(latest, chitId, Date.now()), latest);
     },
     undoBump() {
-      const result = undoLastBump(state);
-      if (result.ok) dispatch({ type: "replace", state: result.state });
-      return result;
+      const latest = fromStore(state);
+      return commit(undoLastBump(latest), latest);
     },
     setVenueTaxes(patch) {
-      dispatch({ type: "replace", state: updateVenueTaxes(state, patch) });
+      dispatch({ type: "replace", state: updateVenueTaxes(fromStore(state), patch) });
+    },
+    claim(tableId) {
+      const latest = fromStore(state);
+      return commit(claimTable(latest, tableId, VENUE.tables, Date.now()), latest);
+    },
+    release(tableId) {
+      const latest = fromStore(state);
+      return commit(releaseClaim(latest, tableId), latest);
+    },
+    reject(tableId) {
+      const latest = fromStore(state);
+      return commit(rejectClaim(latest, tableId), latest);
     },
   };
 

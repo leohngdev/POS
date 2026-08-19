@@ -10,8 +10,15 @@ function bumpQty(map, id, delta) {
   return next;
 }
 
+function tableClass(id, selected, claimed, small) {
+  const parts = [small ? "till-table till-table-sm" : "till-table"];
+  if (selected) parts.push("on");
+  if (claimed) parts.push("claimed");
+  return parts.join(" ");
+}
+
 export function DineInView() {
-  const { state, venue, sendOrder } = usePos();
+  const { state, venue, sendOrder, reject } = usePos();
   const [tableId, setTableId] = useState(null);
   const [draft, setDraft] = useState({});
   const [notice, setNotice] = useState(null);
@@ -19,6 +26,7 @@ export function DineInView() {
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
   const ordering = Boolean(tableId);
   const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
+  const claims = state.guestClaims ?? {};
 
   function chooseTable(id) {
     setTableId(id);
@@ -50,16 +58,26 @@ export function DineInView() {
               <p className="till-empty">No tables configured</p>
             ) : (
               <div className="till-map">
-                {venue.tables.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={tableId === id ? "till-table on" : "till-table"}
-                    onClick={() => chooseTable(id)}
-                  >
-                    {id}
-                  </button>
-                ))}
+                {venue.tables.map((id) => {
+                  const claimed = Boolean(claims[id]);
+                  return (
+                    <div key={`${id}-${claims[id]?.at ?? "open"}`} className="till-table-cell">
+                      <button
+                        type="button"
+                        className={tableClass(id, tableId === id, claimed, false)}
+                        onClick={() => chooseTable(id)}
+                      >
+                        {id}
+                        {claimed ? <span className="till-claim-tag">Guest</span> : null}
+                      </button>
+                      {claimed ? (
+                        <button type="button" className="till-reject" onClick={() => reject(id)}>
+                          Reject
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>
@@ -70,7 +88,7 @@ export function DineInView() {
                 <button
                   key={id}
                   type="button"
-                  className={tableId === id ? "till-table till-table-sm on" : "till-table till-table-sm"}
+                  className={tableClass(id, tableId === id, Boolean(claims[id]), true)}
                   onClick={() => chooseTable(id)}
                 >
                   {id}

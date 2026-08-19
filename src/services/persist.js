@@ -10,6 +10,7 @@ export function toSnapshot(state) {
     nextChit: state.nextChit,
     nextTakeaway: state.nextTakeaway,
     lastBumpedChitId: state.lastBumpedChitId,
+    guestClaims: state.guestClaims ?? {},
     venue: {
       gstEnabled: Boolean(state.venue.gstEnabled),
       gstRate: state.venue.gstRate,
@@ -33,6 +34,7 @@ export function fromSnapshot(raw, baseState) {
     nextChit: Number(raw.nextChit) || 1,
     nextTakeaway: Number(raw.nextTakeaway) || 1,
     lastBumpedChitId: raw.lastBumpedChitId ?? null,
+    guestClaims: raw.guestClaims && typeof raw.guestClaims === "object" ? raw.guestClaims : {},
     venue: {
       ...baseState.venue,
       ...raw.venue,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInitialState, send, compactLines } from "./pos";
+import { createInitialState, send, compactLines, claimTable } from "./pos";
 import { VENUE } from "./venue";
 import { fromSnapshot, loadState, toSnapshot, writeStore, STORAGE_KEY } from "./persist";
 
@@ -64,5 +64,31 @@ describe("persist", () => {
     writeStore(sent.state, storage);
     const loaded = loadState(createInitialState(), storage);
     expect(loaded.checks[0].queueNumber).toBe("T-01");
+  });
+
+  it("keeps guest claims on schema 1", () => {
+    const claimed = {
+      ...createInitialState(),
+      guestClaims: { "04": { at: 12 } },
+    };
+    const snap = toSnapshot(claimed);
+    expect(snap.guestClaims["04"].at).toBe(12);
+    const loaded = fromSnapshot(snap, createInitialState());
+    expect(loaded.guestClaims["04"].at).toBe(12);
+  });
+
+  it("round-trips guest chit source", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const sent = send({
+      state: claimed.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 2,
+      requireClaim: true,
+    });
+    const loaded = fromSnapshot(toSnapshot(sent.state), createInitialState());
+    expect(loaded.chits[0].source).toBe("guest");
   });
 });

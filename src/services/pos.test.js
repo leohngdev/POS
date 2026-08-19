@@ -13,6 +13,9 @@ import {
   checkTotal,
   updateVenueTaxes,
   clampRate,
+  normalizeTableId,
+  claimTable,
+  rejectClaim,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -151,5 +154,95 @@ describe("Venue tax", () => {
 
   it("ignores NaN rates", () => {
     expect(clampRate(Number("nope"), 0.1)).toBe(0.1);
+  });
+});
+
+describe("Guest claim", () => {
+  it("normalizes typed and QR table ids to venue tables", () => {
+    expect(normalizeTableId("4", VENUE.tables)).toBe("04");
+    expect(normalizeTableId("04", VENUE.tables)).toBe("04");
+    expect(normalizeTableId("004", VENUE.tables)).toBe("04");
+    expect(normalizeTableId("99", VENUE.tables)).toBe(null);
+    expect(normalizeTableId("nope", VENUE.tables)).toBe(null);
+  });
+
+  it("claims and rejects a table", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 9);
+    expect(claimed.ok).toBe(true);
+    expect(claimed.state.guestClaims["04"].at).toBe(9);
+    const rejected = rejectClaim(claimed.state, "04");
+    expect(rejected.state.guestClaims["04"]).toBeUndefined();
+  });
+
+  it("guest Send on an open table check fires MORE", () => {
+    const staff = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const claimed = claimTable(staff.state, "04", VENUE.tables, 2);
+    const guest = send({
+      state: claimed.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines: compactLines({ kimchi: 1 }, VENUE.menu),
+      now: 2,
+      requireClaim: true,
+    });
+    expect(guest.state.checks).toHaveLength(1);
+    expect(guest.state.chits[1].more).toBe(true);
+    expect(guest.state.chits[1].source).toBe("guest");
+  });
+
+  it("blocks a guest Send after the floor rejects the claim", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const rejected = rejectClaim(claimed.state, "04");
+    const guest = send({
+      state: rejected.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 2,
+      requireClaim: true,
+    });
+    expect(guest.ok).toBe(false);
+    expect(guest.state.chits).toHaveLength(0);
+  });
+
+  it("lets staff Send after a reject without a guest claim", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const rejected = rejectClaim(claimed.state, "04");
+    const staff = send({
+      state: rejected.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 2,
+    });
+    expect(staff.ok).toBe(true);
+    expect(staff.state.chits).toHaveLength(1);
+  });
+
+  it("lets a guest Send again after they re-claim", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const rejected = rejectClaim(claimed.state, "04");
+    const again = claimTable(rejected.state, "04", VENUE.tables, 3);
+    const guest = send({
+      state: again.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 4,
+      requireClaim: true,
+    });
+    expect(guest.ok).toBe(true);
+    expect(again.state.guestClaims["04"].at).toBe(3);
   });
 });

@@ -34,6 +34,7 @@ export function createInitialState() {
     nextChit: 1,
     nextTakeaway: 1,
     lastBumpedChitId: null,
+    guestClaims: {},
     venue: {
       gstEnabled: VENUE.gstEnabled,
       gstRate: VENUE.gstRate,
@@ -80,20 +81,31 @@ export function compactLines(qtyByItem, menu) {
     }));
 }
 
-export function send({ state, venue, channel, tableId, queueNumber, guestName, lines, now }) {
+export const CLAIM_REQUIRED = "Floor rejected this table. Claim it again.";
+
+export function hasGuestClaim(state, tableId) {
+  return Boolean(state.guestClaims?.[tableId]);
+}
+
+export function send({ state, venue, channel, tableId, queueNumber, guestName, lines, now, requireClaim }) {
   if (!lines.length) {
     return { ok: false, error: "Add at least one item before Send.", state };
   }
 
+  const source = requireClaim ? "guest" : "staff";
+
   if (channel === "dine-in") {
+    if (requireClaim && !hasGuestClaim(state, tableId)) {
+      return { ok: false, error: CLAIM_REQUIRED, state };
+    }
     const existing = openCheckForTable(state.checks, tableId);
     if (!existing) {
-      return sendNewCheck({ state, channel, tableId, queueNumber: null, guestName: null, lines, now });
+      return sendNewCheck({ state, channel, tableId, queueNumber: null, guestName: null, lines, now, source });
     }
     if (existing.status === "paid") {
       return { ok: false, error: "This check is closed.", state };
     }
-    return appendSend({ state, check: existing, lines, now });
+    return appendSend({ state, check: existing, lines, now, source });
   }
 
   return sendNewCheck({
@@ -104,10 +116,11 @@ export function send({ state, venue, channel, tableId, queueNumber, guestName, l
     guestName: guestName?.trim() ? guestName.trim() : null,
     lines,
     now,
+    source: "staff",
   });
 }
 
-function sendNewCheck({ state, channel, tableId, queueNumber, guestName, lines, now }) {
+function sendNewCheck({ state, channel, tableId, queueNumber, guestName, lines, now, source }) {
   const check = {
     id: nextId("CHK", state.nextCheck),
     channel,
@@ -124,6 +137,7 @@ function sendNewCheck({ state, channel, tableId, queueNumber, guestName, lines, 
     more: false,
     lines,
     now,
+    source,
   });
   return {
     ok: true,
@@ -139,7 +153,7 @@ function sendNewCheck({ state, channel, tableId, queueNumber, guestName, lines, 
   };
 }
 
-function appendSend({ state, check, lines, now }) {
+function appendSend({ state, check, lines, now, source }) {
   const merged = mergeLines(check.lines, lines);
   const chit = makeChit({
     id: nextId("CHIT", state.nextChit),
@@ -147,6 +161,7 @@ function appendSend({ state, check, lines, now }) {
     more: true,
     lines,
     now,
+    source,
   });
   return {
     ok: true,
@@ -170,11 +185,23 @@ function mergeLines(existing, incoming) {
   return [...byId.values()];
 }
 
-function makeChit({ id, checkId, more, lines, now }) {
+function subtractLines(existing, incoming) {
+  const byId = new Map(existing.map((l) => [l.itemId, { ...l }]));
+  for (const line of incoming) {
+    const prev = byId.get(line.itemId);
+    if (!prev) continue;
+    prev.qty -= line.qty;
+    if (prev.qty <= 0) byId.delete(line.itemId);
+  }
+  return [...byId.values()];
+}
+
+function makeChit({ id, checkId, more, lines, now, source }) {
   return {
     id,
     checkId,
     more,
+    source: source ?? "staff",
     lines: lines.map((l) => ({ ...l })),
     sentAt: now,
     status: "active",
@@ -257,6 +284,71 @@ export function checkLabel(check) {
 
 export function nextQueueNumber(n) {
   return `T-${String(n).padStart(2, "0")}`;
+}
+
+export function normalizeTableId(raw, tables) {
+  if (raw == null || raw === "") return null;
+  const digits = String(raw).replace(/\D/g, "");
+  if (!digits) return null;
+  const n = Number(digits);
+  if (!Number.isInteger(n) || n < 0) return null;
+  const padded = String(n).padStart(2, "0");
+  return tables.includes(padded) ? padded : null;
+}
+
+export function claimTable(state, tableId, tables, now) {
+  if (!tables.includes(tableId)) {
+    return { ok: false, error: "Unknown table.", state };
+  }
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      guestClaims: { ...(state.guestClaims ?? {}), [tableId]: { at: now } },
+    },
+  };
+}
+
+export function releaseClaim(state, tableId) {
+  const next = { ...(state.guestClaims ?? {}) };
+  delete next[tableId];
+  return { ok: true, error: null, state: { ...state, guestClaims: next } };
+}
+
+export function rejectClaim(state, tableId) {
+  const released = releaseClaim(state, tableId).state;
+  const check = openCheckForTable(released.checks, tableId);
+  if (!check || check.status === "paid") {
+    return { ok: true, error: null, state: released };
+  }
+
+  const guestChits = released.chits.filter((c) => c.checkId === check.id && c.source === "guest");
+  if (guestChits.length === 0) {
+    return { ok: true, error: null, state: released };
+  }
+
+  const remainingLines = subtractLines(
+    check.lines,
+    guestChits.flatMap((c) => c.lines)
+  );
+  const removedIds = new Set(guestChits.map((c) => c.id));
+  let chits = released.chits.filter((c) => !removedIds.has(c.id));
+  const lastBumpedChitId = removedIds.has(released.lastBumpedChitId) ? null : released.lastBumpedChitId;
+
+  let checks;
+  if (remainingLines.length === 0) {
+    checks = released.checks.filter((c) => c.id !== check.id);
+    chits = chits.filter((c) => c.checkId !== check.id);
+  } else {
+    checks = released.checks.map((c) => (c.id === check.id ? { ...c, lines: remainingLines } : c));
+  }
+
+  return {
+    ok: true,
+    error: null,
+    state: { ...released, checks, chits, lastBumpedChitId },
+  };
 }
 
 export const LATE_MS = 8 * 60 * 1000;
