@@ -1,6 +1,30 @@
-# React + Vite Starter
+# Hospitality till
 
-Reference **directed canvas** for UI templates in this catalog.
+React + Vite till: PIN, dine-in map, takeaway, FOH tickets, kitchen MORE chits.
+
+## Run
+
+```bash
+npm install
+npm run dev
+```
+
+Starter PIN: `1234` (local gate, not a real secret). Process and screens: `docs/README.md`.
+
+```bash
+npm test
+npm run build
+```
+
+## Folders
+
+- `src/app` — PIN gate composition
+- `src/features/till` — Dine in, Takeaway, Tickets, Kitchen
+- `src/services` — check/chit rules (`pos.js`)
+- `src/shared/ui` — reusable presentational pieces
+- `src/styles` — tokens + global styles
+
+Read `PROJECT.md` before reshaping architecture.
 
 ## Prerequisites
 
@@ -39,9 +63,8 @@ npm run dev
 
 - Small foundational structure
 - Design tokens
-- Disposable demo shell only
-- No product-specific business logic
-- Easy to delete and replace
+- Disposable demo shell only — **replaced** by `src/features/till`
+- Product logic lives in `src/services/pos.js`, not in presentational pieces
 
 ## Folders
 

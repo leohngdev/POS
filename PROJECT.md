@@ -14,15 +14,16 @@ Follow `core/languages/javascript.md` from the starters catalog (copy or keep ne
 
 | Path | Role |
 |---|---|
-| `src/app/` | App shell and root composition |
-| `src/features/` | Product features (put the next feature here) |
+| `src/app/` | PIN gate + till composition |
+| `src/features/till/` | Dine in, Takeaway, Tickets, Kitchen |
+| `src/services/` | Check/chit domain (`pos.js`), venue stubs |
 | `src/shared/ui/` | Reusable UI primitives |
 | `src/styles/` | Tokens and global CSS |
 
 ## Rules for collaborators (including AI)
 
 - Extend this structure; do not invent a parallel layout.
-- Demo content under the shell is disposable—replace it when the product direction is clear.
+- Demo content under the shell is disposable—replace it when the product direction is clear. The admin demo is gone; till screens are the product.
 - Reuse design tokens before adding one-off colors/spacing.
 - Keep business logic and API I/O out of pure presentational pieces when practical.
 
@@ -42,7 +43,4 @@ When you ship work:
 
 ## Archetype
 
-- Active: `admin`
-- Overlay path: `archetype/` (feature slots + IA)
-- **Canvas applied** into the demo UI where supported (React/HTML/Expo/Electron) — your archetype choice should look different on day one.
-- Merge slots into your template feature folder; keep demo disposable.
+- Active: `admin` canvas was the starting IA; product UI is now `src/features/till`
