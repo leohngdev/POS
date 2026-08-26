@@ -454,6 +454,21 @@
   grid-template-columns: 1fr 1fr;
 }
 
+.guest-bill {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.guest-bill h2 {
+  margin-top: 0;
+}
+
+.guest-root .till-pay-pair .till-primary {
+  width: 100%;
+}
+
 @media (max-width: 900px) {
   .till-shell,
   .till-shell-kitchen {

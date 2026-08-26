@@ -70,6 +70,11 @@ export function openCheckForTable(checks, tableId) {
   return checks.find((c) => c.channel === "dine-in" && c.tableId === tableId && c.status === "open") ?? null;
 }
 
+export function lastPaidCheckForTable(checks, tableId) {
+  const paid = checks.filter((c) => c.channel === "dine-in" && c.tableId === tableId && c.status === "paid");
+  return paid.length ? paid[paid.length - 1] : null;
+}
+
 export function compactLines(qtyByItem, menu) {
   return menu
     .filter((item) => (qtyByItem[item.id] ?? 0) > 0)

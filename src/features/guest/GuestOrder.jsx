@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { CLAIM_REQUIRED, compactLines, hasGuestClaim, normalizeTableId, openCheckForTable } from "../../services/pos";
+import {
+  CLAIM_REQUIRED,
+  checkSubtotal,
+  checkTotal,
+  compactLines,
+  hasGuestClaim,
+  lastPaidCheckForTable,
+  lineTotal,
+  money,
+  normalizeTableId,
+  openCheckForTable,
+} from "../../services/pos";
 import { usePos } from "../till/PosProvider";
 import { MenuGrid } from "../till/MenuGrid";
 
@@ -9,14 +20,55 @@ function bumpQty(map, id, delta) {
   return next;
 }
 
+function GuestBill({ check, venue }) {
+  const sub = checkSubtotal(check);
+  const total = checkTotal(check, venue);
+  return (
+    <section className="guest-bill">
+      <h2>This table’s check</h2>
+      <ul className="till-lines">
+        {check.lines.map((line) => (
+          <li key={line.itemId}>
+            x{line.qty} {line.name}
+            <span>{money(lineTotal(line))}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="till-totals">
+        <div>
+          <span>Subtotal</span>
+          <span>{money(sub)}</span>
+        </div>
+        {venue.gstEnabled ? (
+          <div>
+            <span>GST</span>
+            <span>{money(sub * venue.gstRate)}</span>
+          </div>
+        ) : null}
+        {venue.surchargeEnabled ? (
+          <div>
+            <span>Surcharge</span>
+            <span>{money(sub * venue.surchargeRate)}</span>
+          </div>
+        ) : null}
+        <div className="till-grand">
+          <span>Total</span>
+          <span>{money(total)}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function GuestOrder({ initialTable }) {
-  const { state, venue, sendOrder, claim, release } = usePos();
+  const { state, venue, sendOrder, claim, release, pay } = usePos();
   const [tableId, setTableId] = useState(null);
   const [typed, setTyped] = useState("");
   const [draft, setDraft] = useState({});
   const [notice, setNotice] = useState(null);
   const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
+  const lastPaid = tableId && !openCheck ? lastPaidCheckForTable(state.checks, tableId) : null;
 
   async function pick(id) {
     if (tableId && tableId !== id) await release(tableId);
@@ -79,6 +131,17 @@ export function GuestOrder({ initialTable }) {
     setNotice("Sent to kitchen");
   }
 
+  async function settle(via) {
+    if (!openCheck) return;
+    const result = await pay(openCheck.id, via);
+    if (!result.ok) {
+      setNotice(result.error);
+      return;
+    }
+    setDraft({});
+    setNotice(via === "card" ? "Paid · card" : "Paid · cash");
+  }
+
   return (
     <div className="till-root guest-root">
       <p className="till-eyebrow">Order at the table</p>
@@ -112,8 +175,10 @@ export function GuestOrder({ initialTable }) {
           <h1>Table {tableId}</h1>
           <p className="till-muted">
             {openCheck
-              ? "Adding to this table’s check. Kitchen gets a new ticket."
-              : "First order from this table."}
+              ? "This is the table check. Send adds MORE. Card/Cash marks it paid — same as the till, no card machine."
+              : lastPaid
+                ? `Last check paid · ${lastPaid.paidVia}. Send starts a new check.`
+                : "First order from this table."}
           </p>
           <button type="button" className="till-ghost guest-change" onClick={changeTable}>
             Change table
@@ -127,12 +192,25 @@ export function GuestOrder({ initialTable }) {
             }}
             onRemove={(id) => setDraft((d) => bumpQty(d, id, -1))}
           />
+          {openCheck ? <GuestBill check={openCheck} venue={venue} /> : null}
           {notice ? (
-            <p className={notice.startsWith("Sent") ? "till-ok" : "till-error"}>{notice}</p>
+            <p className={notice.startsWith("Sent") || notice.startsWith("Paid") ? "till-ok" : "till-error"}>
+              {notice}
+            </p>
           ) : null}
           <button type="button" className="till-primary" disabled={lines.length === 0} onClick={send}>
             Send to kitchen
           </button>
+          {openCheck ? (
+            <div className="till-pay-pair">
+              <button type="button" className="till-primary" onClick={() => settle("card")}>
+                Card
+              </button>
+              <button type="button" className="till-primary" onClick={() => settle("cash")}>
+                Cash
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </div>

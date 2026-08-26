@@ -5,6 +5,7 @@ import {
   claimTable,
   compactLines,
   createInitialState,
+  lastPaidCheckForTable,
   openCheckForTable,
   payCheck,
   rejectClaim,
@@ -175,5 +176,43 @@ describe("Sprint 3 guest channel", () => {
     expect(loaded.checks).toHaveLength(0);
     expect(loaded.chits).toHaveLength(0);
     expect(loaded.guestClaims["04"]).toBeUndefined();
+  });
+});
+
+describe("Sprint 5 guest pay", () => {
+  it("lets a guest Card/Cash the open table check", () => {
+    const ordered = guestSend(createInitialState(), "04", wagyu, 1);
+    const paid = payCheck(ordered.state, ordered.state.checks[0].id, "card");
+    expect(paid.ok).toBe(true);
+    expect(paid.state.checks[0].status).toBe("paid");
+    expect(paid.state.checks[0].paidVia).toBe("card");
+    expect(openCheckForTable(paid.state.checks, "04")).toBe(null);
+    expect(lastPaidCheckForTable(paid.state.checks, "04").id).toBe("CHK-1");
+    expect(paid.state.guestClaims["04"]).toBeTruthy();
+  });
+
+  it("does not create a kitchen chit when the guest pays", () => {
+    const ordered = guestSend(createInitialState(), "04", wagyu, 1);
+    const paid = payCheck(ordered.state, ordered.state.checks[0].id, "cash");
+    expect(paid.state.chits).toHaveLength(1);
+    expect(activeChits(paid.state)).toHaveLength(1);
+  });
+
+  it("opens a new check if the guest Sends after paying", () => {
+    const ordered = guestSend(createInitialState(), "04", wagyu, 1);
+    const paid = payCheck(ordered.state, ordered.state.checks[0].id, "card");
+    const again = guestSend(paid.state, "04", kimchi, 4);
+    expect(again.ok).toBe(true);
+    expect(again.state.checks).toHaveLength(2);
+    expect(again.state.chits[1].more).toBe(false);
+    expect(openCheckForTable(again.state.checks, "04").lines[0].itemId).toBe("kimchi");
+  });
+
+  it("refuses a second pay on the same check", () => {
+    const ordered = guestSend(createInitialState(), "04", wagyu, 1);
+    const paid = payCheck(ordered.state, ordered.state.checks[0].id, "card");
+    const again = payCheck(paid.state, paid.state.checks[0].id, "cash");
+    expect(again.ok).toBe(false);
+    expect(paid.state.checks[0].paidVia).toBe("card");
   });
 });
