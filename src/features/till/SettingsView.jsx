@@ -32,7 +32,7 @@ export function SettingsView() {
       <h1>Settings</h1>
       <p className="till-muted">This venue only. Totals on the bill follow these flags. PIN stays 1234 in code this sprint.</p>
       <p className="till-muted">
-        Sync: {syncStatus === "live" ? "venue live — phone and till share checks." : "this device only — start `npm run dev` so /api/snapshot is up."}
+        Sync: {syncStatus === "live" ? "venue live — phone and till share checks." : "this device only — run `npm run dev` or `npm start` so /api/snapshot is up."}
       </p>
       <section className="till-settings">
         <label className="till-setting">
@@ -76,9 +76,9 @@ export function SettingsView() {
       </section>
       <h2>Guest order</h2>
       <p className="till-muted">
-        Phone and till must open the same origin (this Vite host). `npm run dev` listens on the LAN.
+        Phone and till must open the same origin. For a service night: `npm run build && npm start` (LAN, port 4173). For coding: `npm run dev`.
         {loopback
-          ? " This tab is localhost — a real phone cannot reach it. Open the till at this PC’s LAN address shown in the Vite terminal, then copy the link again."
+          ? " This tab is localhost — a real phone cannot reach it. Open the till at this PC’s LAN address, then copy the link again."
           : " Copy a link below onto the guest phone on the same Wi‑Fi."}
       </p>
       <section className="till-settings">

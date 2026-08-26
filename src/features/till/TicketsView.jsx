@@ -6,17 +6,18 @@ import { BillPanel } from "./BillPanel";
 function TicketCard({ check, venue, chits, selected, onSelect }) {
   const floor = checkFloorStatus(check, chits);
   const label = floor === "paid" ? "Paid" : floor === "cooking" ? "Cooking" : "Pay now";
+  const collapsed = floor === "paid" && !selected;
   return (
     <button
       type="button"
-      className={`till-ticket${selected ? " on" : ""}${floor === "paid" ? " paid" : ""}`}
+      className={`till-ticket${selected ? " on" : ""}${floor === "paid" ? " paid" : ""}${collapsed ? " collapsed" : ""}`}
       onClick={onSelect}
     >
       <strong>{checkLabel(check)}</strong>
       <span>
-        {label} · {money(checkTotal(check, venue))}
+        {collapsed ? `${check.paidVia} · ${money(checkTotal(check, venue))}` : `${label} · ${money(checkTotal(check, venue))}`}
       </span>
-      <span className="till-chip">{label}</span>
+      {collapsed ? null : <span className="till-chip">{label}</span>}
     </button>
   );
 }

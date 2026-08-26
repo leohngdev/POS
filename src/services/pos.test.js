@@ -9,6 +9,7 @@ import {
   activeChits,
   openCheckForTable,
   checkFloorStatus,
+  tableFloorStatus,
   verifyPin,
   checkTotal,
   updateVenueTaxes,
@@ -137,6 +138,22 @@ describe("Kitchen bump", () => {
     expect(checkFloorStatus(check, bumped.state.chits)).toBe("ready");
     const paid = payCheck(bumped.state, check.id, "card");
     expect(checkFloorStatus(paid.state.checks[0], paid.state.chits)).toBe("paid");
+    expect(tableFloorStatus(paid.state, "04")).toBe("empty");
+  });
+
+  it("marks a table cooking then ready on the floor", () => {
+    expect(tableFloorStatus(createInitialState(), "04")).toBe("empty");
+    const ordered = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    expect(tableFloorStatus(ordered.state, "04")).toBe("cooking");
+    const bumped = bumpChit(ordered.state, ordered.state.chits[0].id, 5);
+    expect(tableFloorStatus(bumped.state, "04")).toBe("ready");
   });
 });
 

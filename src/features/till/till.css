@@ -195,6 +195,14 @@
   font-weight: 700;
 }
 
+.till-table.cooking {
+  border-color: var(--color-text);
+}
+
+.till-table.ready {
+  border-style: dashed;
+}
+
 .till-menu {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -301,6 +309,10 @@
 
 .till-ticket.on { border-color: var(--color-text); }
 .till-ticket.paid { opacity: 0.75; }
+.till-ticket.collapsed {
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
+}
 .till-chip {
   display: inline-block;
   font-size: 12px;

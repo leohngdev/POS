@@ -280,6 +280,12 @@ export function checkFloorStatus(check, chits) {
   return cooking ? "cooking" : "ready";
 }
 
+export function tableFloorStatus(state, tableId) {
+  const check = openCheckForTable(state.checks, tableId);
+  if (!check) return "empty";
+  return checkFloorStatus(check, state.chits);
+}
+
 export function checkLabel(check) {
   if (check.channel === "takeaway") {
     return check.guestName ? `${check.queueNumber} · ${check.guestName}` : check.queueNumber;

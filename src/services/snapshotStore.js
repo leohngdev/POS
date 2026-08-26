@@ -1,4 +1,4 @@
-import { SCHEMA } from "./persist";
+import { SCHEMA } from "./persist.js";
 
 export function createSnapshotStore(initial = { rev: 0, snapshot: null }) {
   let rev = Number(initial.rev) || 0;

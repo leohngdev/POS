@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { compactLines, openCheckForTable } from "../../services/pos";
+import { compactLines, openCheckForTable, tableFloorStatus } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { MenuGrid } from "./MenuGrid";
 import { BillPanel } from "./BillPanel";
@@ -10,10 +10,11 @@ function bumpQty(map, id, delta) {
   return next;
 }
 
-function tableClass(id, selected, claimed, small) {
+function tableClass(id, selected, claimed, floor, small) {
   const parts = [small ? "till-table till-table-sm" : "till-table"];
   if (selected) parts.push("on");
   if (claimed) parts.push("claimed");
+  if (floor === "cooking" || floor === "ready") parts.push(floor);
   return parts.join(" ");
 }
 
@@ -26,6 +27,7 @@ export function DineInView() {
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
   const ordering = Boolean(tableId);
   const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
+  const billLines = lines.length ? lines : openCheck?.lines ?? [];
   const claims = state.guestClaims ?? {};
 
   function chooseTable(id) {
@@ -61,15 +63,18 @@ export function DineInView() {
               <div className="till-map">
                 {venue.tables.map((id) => {
                   const claimed = Boolean(claims[id]);
+                  const floor = tableFloorStatus(state, id);
+                  const floorTag = floor === "cooking" ? "Cooking" : floor === "ready" ? "To pay" : null;
                   return (
                     <div key={`${id}-${claims[id]?.at ?? "open"}`} className="till-table-cell">
                       <button
                         type="button"
-                        className={tableClass(id, tableId === id, claimed, false)}
+                        className={tableClass(id, tableId === id, claimed, floor, false)}
                         onClick={() => chooseTable(id)}
                       >
                         {id}
                         {claimed ? <span className="till-claim-tag">Guest</span> : null}
+                        {!claimed && floorTag ? <span className="till-claim-tag">{floorTag}</span> : null}
                       </button>
                       {claimed ? (
                         <button type="button" className="till-reject" onClick={() => reject(id)}>
@@ -89,7 +94,7 @@ export function DineInView() {
                 <button
                   key={id}
                   type="button"
-                  className={tableClass(id, tableId === id, Boolean(claims[id]), true)}
+                  className={tableClass(id, tableId === id, Boolean(claims[id]), tableFloorStatus(state, id), true)}
                   onClick={() => chooseTable(id)}
                 >
                   {id}
@@ -111,10 +116,12 @@ export function DineInView() {
       </main>
       <BillPanel
         title={tableId ? `Table ${tableId}` : "No table yet"}
-        lines={lines}
+        lines={billLines}
         venue={venue}
         extra={
-          openCheck ? (
+          openCheck && lines.length === 0 ? (
+            <p className="till-muted">Open check {openCheck.id}. Add items and Send for MORE.</p>
+          ) : openCheck ? (
             <p className="till-muted">Open check {openCheck.id}. Send again appends and fires MORE.</p>
           ) : tableId ? (
             <p className="till-muted">New check on Send.</p>

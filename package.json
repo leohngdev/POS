@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
+    "start": "node src/services/runVenueHost.js",
     "preview": "vite preview --host",
     "test": "vitest run"
   },

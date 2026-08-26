@@ -9,9 +9,14 @@ npm install
 npm run dev
 ```
 
-`npm run dev` listens on the LAN (`--host`). Open the **Network** URL on the till so a phone can reach `/api/snapshot`. `localhost` will not.
+`npm run dev` listens on the LAN (`--host`). For a service night:
 
-Starter PIN: `1234` (local gate, not a real secret). Process and screens: `docs/README.md`.
+```bash
+npm run build
+npm start
+```
+
+That serves the till and `/api/snapshot` on port **4173** (override with `PORT`). Open the machine’s LAN IP, not only localhost. Starter PIN: `1234`.
 
 ```bash
 npm test
