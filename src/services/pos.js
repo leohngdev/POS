@@ -92,6 +92,23 @@ export function hasGuestClaim(state, tableId) {
   return Boolean(state.guestClaims?.[tableId]);
 }
 
+export function guestClaimStatus(claim) {
+  if (!claim) return null;
+  return claim.status === "accepted" ? "accepted" : "pending";
+}
+
+export function tableClaimStatus(state, tableId) {
+  return guestClaimStatus(state.guestClaims?.[tableId]);
+}
+
+export function hasPendingGuestClaims(state) {
+  return Object.values(state.guestClaims ?? {}).some((c) => guestClaimStatus(c) === "pending");
+}
+
+export function pendingGuestTables(state, tables) {
+  return tables.filter((id) => tableClaimStatus(state, id) === "pending");
+}
+
 export function send({ state, venue, channel, tableId, queueNumber, guestName, lines, now, requireClaim }) {
   if (!lines.length) {
     return { ok: false, error: "Add at least one item before Send.", state };
@@ -104,13 +121,15 @@ export function send({ state, venue, channel, tableId, queueNumber, guestName, l
       return { ok: false, error: CLAIM_REQUIRED, state };
     }
     const existing = openCheckForTable(state.checks, tableId);
+    let result;
     if (!existing) {
-      return sendNewCheck({ state, channel, tableId, queueNumber: null, guestName: null, lines, now, source });
-    }
-    if (existing.status === "paid") {
+      result = sendNewCheck({ state, channel, tableId, queueNumber: null, guestName: null, lines, now, source });
+    } else if (existing.status === "paid") {
       return { ok: false, error: "This check is closed.", state };
+    } else {
+      result = appendSend({ state, check: existing, lines, now, source });
     }
-    return appendSend({ state, check: existing, lines, now, source });
+    return seatStaffSend(result, tableId, source);
   }
 
   return sendNewCheck({
@@ -311,14 +330,43 @@ export function claimTable(state, tableId, tables, now) {
   if (!tables.includes(tableId)) {
     return { ok: false, error: "Unknown table.", state };
   }
+  const existing = state.guestClaims?.[tableId];
+  const status = guestClaimStatus(existing) === "accepted" ? "accepted" : "pending";
   return {
     ok: true,
     error: null,
     state: {
       ...state,
-      guestClaims: { ...(state.guestClaims ?? {}), [tableId]: { at: now } },
+      guestClaims: { ...(state.guestClaims ?? {}), [tableId]: { at: now, status } },
     },
   };
+}
+
+export function acceptClaim(state, tableId) {
+  const claim = state.guestClaims?.[tableId];
+  if (!claim) {
+    return { ok: false, error: "No guest on that table.", state };
+  }
+  if (guestClaimStatus(claim) === "accepted") {
+    return { ok: true, error: null, state };
+  }
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      guestClaims: {
+        ...(state.guestClaims ?? {}),
+        [tableId]: { ...claim, status: "accepted" },
+      },
+    },
+  };
+}
+
+function seatStaffSend(result, tableId, source) {
+  if (!result.ok || source !== "staff" || !tableId) return result;
+  const seated = acceptClaim(result.state, tableId);
+  return seated.ok ? { ...result, state: seated.state } : result;
 }
 
 export function releaseClaim(state, tableId) {

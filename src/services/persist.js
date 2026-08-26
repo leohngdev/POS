@@ -1,6 +1,19 @@
 export const STORAGE_KEY = "pos.till.v1";
 export const SCHEMA = 1;
 
+function normalizeGuestClaims(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const next = {};
+  for (const [id, claim] of Object.entries(raw)) {
+    if (!claim || typeof claim !== "object") continue;
+    next[id] = {
+      at: claim.at,
+      status: claim.status === "accepted" ? "accepted" : "pending",
+    };
+  }
+  return next;
+}
+
 export function toSnapshot(state) {
   return {
     schema: SCHEMA,
@@ -10,7 +23,7 @@ export function toSnapshot(state) {
     nextChit: state.nextChit,
     nextTakeaway: state.nextTakeaway,
     lastBumpedChitId: state.lastBumpedChitId,
-    guestClaims: state.guestClaims ?? {},
+    guestClaims: normalizeGuestClaims(state.guestClaims),
     venue: {
       gstEnabled: Boolean(state.venue.gstEnabled),
       gstRate: state.venue.gstRate,
@@ -34,7 +47,7 @@ export function fromSnapshot(raw, baseState) {
     nextChit: Number(raw.nextChit) || 1,
     nextTakeaway: Number(raw.nextTakeaway) || 1,
     lastBumpedChitId: raw.lastBumpedChitId ?? null,
-    guestClaims: raw.guestClaims && typeof raw.guestClaims === "object" ? raw.guestClaims : {},
+    guestClaims: normalizeGuestClaims(raw.guestClaims),
     venue: {
       ...baseState.venue,
       ...raw.venue,

@@ -10,6 +10,7 @@ import {
   money,
   normalizeTableId,
   openCheckForTable,
+  tableClaimStatus,
 } from "../../services/pos";
 import { usePos } from "../till/PosProvider";
 import { MenuGrid } from "../till/MenuGrid";
@@ -69,6 +70,23 @@ export function GuestOrder({ initialTable }) {
   const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
   const lastPaid = tableId && !openCheck ? lastPaidCheckForTable(state.checks, tableId) : null;
+  const seated = tableId ? tableClaimStatus(state, tableId) === "accepted" : false;
+
+  function guestStatusCopy() {
+    if (openCheck) {
+      return seated
+        ? "This is the table check. Send adds MORE. Card/Cash marks it paid — same as the till, no card machine."
+        : "Sent. The floor can still see you pulsing until they Accept.";
+    }
+    if (lastPaid) {
+      return seated
+        ? `Last check paid · ${lastPaid.paidVia}. Send starts a new check.`
+        : `Last check paid · ${lastPaid.paidVia}. Waiting for the floor to Accept.`;
+    }
+    return seated
+      ? "You're seated. First order from this table."
+      : "The floor can see this table. They Accept to seat you. You can still Send.";
+  }
 
   async function pick(id) {
     if (tableId && tableId !== id) await release(tableId);
@@ -173,13 +191,7 @@ export function GuestOrder({ initialTable }) {
       ) : (
         <>
           <h1>Table {tableId}</h1>
-          <p className="till-muted">
-            {openCheck
-              ? "This is the table check. Send adds MORE. Card/Cash marks it paid — same as the till, no card machine."
-              : lastPaid
-                ? `Last check paid · ${lastPaid.paidVia}. Send starts a new check.`
-                : "First order from this table."}
-          </p>
+          <p className="till-muted">{guestStatusCopy()}</p>
           <button type="button" className="till-ghost guest-change" onClick={changeTable}>
             Change table
           </button>

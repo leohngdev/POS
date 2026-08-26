@@ -6,10 +6,11 @@ import {
   bumpChit,
   undoLastBump,
   updateVenueTaxes,
-  claimTable,
-  rejectClaim,
-  releaseClaim,
-} from "../../services/pos";
+    claimTable,
+    rejectClaim,
+    releaseClaim,
+    acceptClaim,
+  } from "../../services/pos";
 import { loadState, writeStore, STORAGE_KEY, toSnapshot } from "../../services/persist";
 import { VENUE } from "../../services/venue";
 import { applyOnVenue, hasLocalService, POLL_MS, pullSnapshot, pushSnapshot, sessionize } from "../../services/sync";
@@ -169,6 +170,9 @@ export function PosProvider({ children }) {
     },
     reject(tableId) {
       return withSync((latest) => rejectClaim(latest, tableId));
+    },
+    accept(tableId) {
+      return withSync((latest) => acceptClaim(latest, tableId));
     },
   };
 

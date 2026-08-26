@@ -77,6 +77,7 @@ export function SettingsView() {
       <h2>Guest order</h2>
       <p className="till-muted">
         Phone and till must open the same origin. For a service night: `npm run build && npm start` (LAN, port 4173). For coding: `npm run dev`.
+        Claimed tables pulse on Dine in and Tickets until the floor Accepts. Reject still voids unpaid guest tickets.
         {loopback
           ? " This tab is localhost — a real phone cannot reach it. Open the till at this PC’s LAN address, then copy the link again."
           : " Copy a link below onto the guest phone on the same Wi‑Fi."}

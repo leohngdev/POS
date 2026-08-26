@@ -5,6 +5,7 @@ import { TicketsView } from "./TicketsView";
 import { KitchenView } from "./KitchenView";
 import { SettingsView } from "./SettingsView";
 import { usePos } from "./PosProvider";
+import { hasPendingGuestClaims } from "../../services/pos";
 
 const NAV = [
   { id: "dine-in", label: "Dine in" },
@@ -16,8 +17,9 @@ const NAV = [
 
 export function TillShell() {
   const [nav, setNav] = useState("dine-in");
-  const { lock, syncStatus } = usePos();
+  const { lock, syncStatus, state } = usePos();
   const wide = nav === "kitchen" || nav === "settings";
+  const guestWaiting = hasPendingGuestClaims(state);
 
   return (
     <div className={`till-root till-shell${wide ? " till-shell-kitchen" : ""}`}>
@@ -28,7 +30,9 @@ export function TillShell() {
           <button
             key={item.id}
             type="button"
-            className={nav === item.id ? "till-nav-item on" : "till-nav-item"}
+            className={`${nav === item.id ? "till-nav-item on" : "till-nav-item"}${
+              guestWaiting && (item.id === "dine-in" || item.id === "tickets") ? " alert" : ""
+            }`}
             onClick={() => setNav(item.id)}
           >
             {item.label}

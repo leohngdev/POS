@@ -73,8 +73,10 @@ describe("persist", () => {
     };
     const snap = toSnapshot(claimed);
     expect(snap.guestClaims["04"].at).toBe(12);
+    expect(snap.guestClaims["04"].status).toBe("pending");
     const loaded = fromSnapshot(snap, createInitialState());
     expect(loaded.guestClaims["04"].at).toBe(12);
+    expect(loaded.guestClaims["04"].status).toBe("pending");
   });
 
   it("round-trips guest chit source", () => {
@@ -90,5 +92,15 @@ describe("persist", () => {
     });
     const loaded = fromSnapshot(toSnapshot(sent.state), createInitialState());
     expect(loaded.chits[0].source).toBe("guest");
+  });
+
+  it("round-trips accepted claims", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const seated = {
+      ...claimed.state,
+      guestClaims: { "04": { at: 1, status: "accepted" } },
+    };
+    const loaded = fromSnapshot(toSnapshot(seated), createInitialState());
+    expect(loaded.guestClaims["04"].status).toBe("accepted");
   });
 });

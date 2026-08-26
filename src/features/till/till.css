@@ -137,6 +137,19 @@
   border-radius: 999px;
   cursor: pointer;
   color: var(--color-muted);
+  position: relative;
+}
+
+.till-nav-item.alert::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--color-primary);
 }
 
 .till-nav-item.on {
@@ -396,6 +409,31 @@
   cursor: pointer;
 }
 
+.till-accept {
+  border: 0;
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  border-radius: var(--radius-md);
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.till-claim-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.till-claim-actions:has(.till-accept:only-child),
+.till-claim-actions:has(.till-reject:only-child) {
+  grid-template-columns: 1fr;
+}
+
+.till-context .till-claim-actions {
+  margin-bottom: var(--space-3);
+}
+
 @keyframes till-claim-pulse {
   0%,
   100% {
@@ -409,6 +447,14 @@
 .till-table.claimed {
   animation: till-claim-pulse 1.4s ease-in-out infinite;
   border-color: var(--color-text);
+}
+
+.till-table.seated {
+  border-color: var(--color-text);
+}
+
+.till-ticket.claimed {
+  animation: till-claim-pulse 1.4s ease-in-out infinite;
 }
 
 .till-code {

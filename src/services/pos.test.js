@@ -17,6 +17,9 @@ import {
   normalizeTableId,
   claimTable,
   rejectClaim,
+  acceptClaim,
+  tableClaimStatus,
+  pendingGuestTables,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -183,6 +186,18 @@ describe("Guest claim", () => {
     expect(normalizeTableId("nope", VENUE.tables)).toBe(null);
   });
 
+  it("claims pending, accepts to seat, and keeps a refresh seated", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 9);
+    expect(claimed.ok).toBe(true);
+    expect(claimed.state.guestClaims["04"].at).toBe(9);
+    expect(tableClaimStatus(claimed.state, "04")).toBe("pending");
+    const seated = acceptClaim(claimed.state, "04");
+    expect(tableClaimStatus(seated.state, "04")).toBe("accepted");
+    const again = claimTable(seated.state, "04", VENUE.tables, 11);
+    expect(tableClaimStatus(again.state, "04")).toBe("accepted");
+    expect(again.state.guestClaims["04"].at).toBe(11);
+  });
+
   it("claims and rejects a table", () => {
     const claimed = claimTable(createInitialState(), "04", VENUE.tables, 9);
     expect(claimed.ok).toBe(true);
@@ -261,5 +276,58 @@ describe("Guest claim", () => {
     });
     expect(guest.ok).toBe(true);
     expect(again.state.guestClaims["04"].at).toBe(3);
+  });
+
+  it("guest Send leaves the claim pending", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const guest = send({
+      state: claimed.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 2,
+      requireClaim: true,
+    });
+    expect(guest.ok).toBe(true);
+    expect(tableClaimStatus(guest.state, "04")).toBe("pending");
+  });
+
+  it("staff Send on a pulsing table seats the guest", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const staff = send({
+      state: claimed.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 2,
+    });
+    expect(staff.ok).toBe(true);
+    expect(tableClaimStatus(staff.state, "04")).toBe("accepted");
+  });
+
+  it("staff Send on an empty table does not invent a claim", () => {
+    const staff = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    expect(tableClaimStatus(staff.state, "04")).toBe(null);
+  });
+
+  it("accept with no claim is refused", () => {
+    const result = acceptClaim(createInitialState(), "04");
+    expect(result.ok).toBe(false);
+    expect(pendingGuestTables(result.state, VENUE.tables)).toEqual([]);
+  });
+
+  it("treats a legacy claim without status as pending", () => {
+    const legacy = { ...createInitialState(), guestClaims: { "04": { at: 1 } } };
+    expect(tableClaimStatus(legacy, "04")).toBe("pending");
+    expect(pendingGuestTables(legacy, VENUE.tables)).toEqual(["04"]);
   });
 });

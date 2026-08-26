@@ -11,6 +11,8 @@ import {
   rejectClaim,
   releaseClaim,
   send,
+  acceptClaim,
+  tableClaimStatus,
 } from "./pos";
 import { VENUE } from "./venue";
 import { fromSnapshot, toSnapshot } from "./persist";
@@ -206,6 +208,16 @@ describe("Sprint 5 guest pay", () => {
     expect(again.state.checks).toHaveLength(2);
     expect(again.state.chits[1].more).toBe(false);
     expect(openCheckForTable(again.state.checks, "04").lines[0].itemId).toBe("kimchi");
+  });
+
+  it("accept seats a guest and keeps their unpaid ticket", () => {
+    const ordered = guestSend(createInitialState(), "04", wagyu, 1);
+    expect(tableClaimStatus(ordered.state, "04")).toBe("pending");
+    const seated = acceptClaim(ordered.state, "04");
+    expect(tableClaimStatus(seated.state, "04")).toBe("accepted");
+    expect(seated.state.checks).toHaveLength(1);
+    expect(seated.state.chits).toHaveLength(1);
+    expect(openCheckForTable(seated.state.checks, "04").status).toBe("open");
   });
 
   it("refuses a second pay on the same check", () => {

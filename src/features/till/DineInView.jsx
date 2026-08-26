@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { compactLines, openCheckForTable, tableFloorStatus } from "../../services/pos";
+import { compactLines, openCheckForTable, tableClaimStatus, tableFloorStatus } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { MenuGrid } from "./MenuGrid";
 import { BillPanel } from "./BillPanel";
+import { ClaimActions } from "./ClaimActions";
 
 function bumpQty(map, id, delta) {
   const next = { ...map, [id]: Math.max(0, (map[id] ?? 0) + delta) };
@@ -10,16 +11,23 @@ function bumpQty(map, id, delta) {
   return next;
 }
 
-function tableClass(id, selected, claimed, floor, small) {
+function tableClass(id, selected, claim, floor, small) {
   const parts = [small ? "till-table till-table-sm" : "till-table"];
   if (selected) parts.push("on");
-  if (claimed) parts.push("claimed");
+  if (claim === "pending") parts.push("claimed");
+  if (claim === "accepted") parts.push("seated");
   if (floor === "cooking" || floor === "ready") parts.push(floor);
   return parts.join(" ");
 }
 
+function tableTags(claim, floor) {
+  const floorTag = floor === "cooking" ? "Cooking" : floor === "ready" ? "To pay" : null;
+  const guestTag = claim === "pending" ? "Guest" : claim === "accepted" ? "Seated" : null;
+  return { guestTag, floorTag: claim === "pending" ? null : floorTag };
+}
+
 export function DineInView() {
-  const { state, venue, sendOrder, reject } = usePos();
+  const { state, venue, sendOrder, reject, accept } = usePos();
   const [tableId, setTableId] = useState(null);
   const [draft, setDraft] = useState({});
   const [notice, setNotice] = useState(null);
@@ -28,7 +36,7 @@ export function DineInView() {
   const ordering = Boolean(tableId);
   const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
   const billLines = lines.length ? lines : openCheck?.lines ?? [];
-  const claims = state.guestClaims ?? {};
+  const selectedClaim = tableId ? tableClaimStatus(state, tableId) : null;
 
   function chooseTable(id) {
     setTableId(id);
@@ -62,25 +70,21 @@ export function DineInView() {
             ) : (
               <div className="till-map">
                 {venue.tables.map((id) => {
-                  const claimed = Boolean(claims[id]);
+                  const claim = tableClaimStatus(state, id);
                   const floor = tableFloorStatus(state, id);
-                  const floorTag = floor === "cooking" ? "Cooking" : floor === "ready" ? "To pay" : null;
+                  const { guestTag, floorTag } = tableTags(claim, floor);
                   return (
-                    <div key={`${id}-${claims[id]?.at ?? "open"}`} className="till-table-cell">
+                    <div key={`${id}-${state.guestClaims?.[id]?.at ?? "open"}`} className="till-table-cell">
                       <button
                         type="button"
-                        className={tableClass(id, tableId === id, claimed, floor, false)}
+                        className={tableClass(id, tableId === id, claim, floor, false)}
                         onClick={() => chooseTable(id)}
                       >
                         {id}
-                        {claimed ? <span className="till-claim-tag">Guest</span> : null}
-                        {!claimed && floorTag ? <span className="till-claim-tag">{floorTag}</span> : null}
+                        {guestTag ? <span className="till-claim-tag">{guestTag}</span> : null}
+                        {floorTag ? <span className="till-claim-tag">{floorTag}</span> : null}
                       </button>
-                      {claimed ? (
-                        <button type="button" className="till-reject" onClick={() => reject(id)}>
-                          Reject
-                        </button>
-                      ) : null}
+                      <ClaimActions status={claim} onAccept={() => accept(id)} onReject={() => reject(id)} />
                     </div>
                   );
                 })}
@@ -94,7 +98,7 @@ export function DineInView() {
                 <button
                   key={id}
                   type="button"
-                  className={tableClass(id, tableId === id, Boolean(claims[id]), tableFloorStatus(state, id), true)}
+                  className={tableClass(id, tableId === id, tableClaimStatus(state, id), tableFloorStatus(state, id), true)}
                   onClick={() => chooseTable(id)}
                 >
                   {id}
@@ -119,7 +123,9 @@ export function DineInView() {
         lines={billLines}
         venue={venue}
         extra={
-          openCheck && lines.length === 0 ? (
+          selectedClaim === "pending" ? (
+            <p className="till-muted">Guest claimed this table. Accept to seat them, or Reject to kick them off.</p>
+          ) : openCheck && lines.length === 0 ? (
             <p className="till-muted">Open check {openCheck.id}. Add items and Send for MORE.</p>
           ) : openCheck ? (
             <p className="till-muted">Open check {openCheck.id}. Send again appends and fires MORE.</p>
@@ -133,6 +139,9 @@ export function DineInView() {
         primaryDisabled={!tableId || lines.length === 0}
         onPrimary={tableId ? send : undefined}
       >
+        {ordering ? (
+          <ClaimActions status={selectedClaim} onAccept={() => accept(tableId)} onReject={() => reject(tableId)} />
+        ) : null}
         {notice ? <p className={notice.startsWith("Sent") ? "till-ok" : "till-error"}>{notice}</p> : null}
       </BillPanel>
     </>
