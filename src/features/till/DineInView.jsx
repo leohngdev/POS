@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { compactLines, openCheckForTable, tableClaimStatus, tableFloorStatus } from "../../services/pos";
+import { compactLines, canVoidLastSend, moveTargets, openCheckForTable, tableClaimStatus, tableFloorStatus } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { MenuGrid } from "./MenuGrid";
 import { BillPanel } from "./BillPanel";
 import { ClaimActions } from "./ClaimActions";
+import { TableOps } from "./TableOps";
 
 function bumpQty(map, id, delta) {
   const next = { ...map, [id]: Math.max(0, (map[id] ?? 0) + delta) };
@@ -27,21 +28,31 @@ function tableTags(claim, floor) {
 }
 
 export function DineInView() {
-  const { state, venue, sendOrder, reject, accept } = usePos();
+  const { state, venue, sendOrder, reject, accept, move, voidSend } = usePos();
   const [tableId, setTableId] = useState(null);
   const [draft, setDraft] = useState({});
   const [notice, setNotice] = useState(null);
+  const [moving, setMoving] = useState(false);
 
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
   const ordering = Boolean(tableId);
   const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
   const billLines = lines.length ? lines : openCheck?.lines ?? [];
   const selectedClaim = tableId ? tableClaimStatus(state, tableId) : null;
+  const targets = tableId ? moveTargets(state, venue.tables, tableId) : [];
 
   function chooseTable(id) {
     setTableId(id);
     setDraft({});
     setNotice(null);
+    setMoving(false);
+  }
+
+  function backToFloor() {
+    setTableId(null);
+    setDraft({});
+    setNotice(null);
+    setMoving(false);
   }
 
   function send() {
@@ -94,6 +105,9 @@ export function DineInView() {
         ) : (
           <>
             <div className="till-strip">
+              <button type="button" className="till-table till-table-sm" onClick={backToFloor}>
+                Floor
+              </button>
               {venue.tables.map((id) => (
                 <button
                   key={id}
@@ -142,7 +156,40 @@ export function DineInView() {
         {ordering ? (
           <ClaimActions status={selectedClaim} onAccept={() => accept(tableId)} onReject={() => reject(tableId)} />
         ) : null}
-        {notice ? <p className={notice.startsWith("Sent") ? "till-ok" : "till-error"}>{notice}</p> : null}
+        {ordering ? (
+          <TableOps
+            showMove={Boolean(openCheck || selectedClaim)}
+            targets={targets}
+            moving={moving}
+            onToggleMove={() => setMoving((m) => !m)}
+            onMoveTo={(id) => {
+              move(tableId, id).then((result) => {
+                if (!result.ok) {
+                  setNotice(result.error);
+                  return;
+                }
+                setTableId(id);
+                setMoving(false);
+                setNotice(`Moved to ${id}`);
+              });
+            }}
+            canVoid={openCheck ? canVoidLastSend(state, openCheck.id) : false}
+            onVoid={
+              openCheck
+                ? () => {
+                    voidSend(openCheck.id).then((result) => {
+                      if (!result.ok) {
+                        setNotice(result.error);
+                        return;
+                      }
+                      setNotice("Voided last Send");
+                    });
+                  }
+                : undefined
+            }
+          />
+        ) : null}
+        {notice ? <p className={notice.startsWith("Sent") || notice.startsWith("Moved") || notice.startsWith("Voided") ? "till-ok" : "till-error"}>{notice}</p> : null}
       </BillPanel>
     </>
   );

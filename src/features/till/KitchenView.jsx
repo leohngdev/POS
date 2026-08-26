@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LATE_MS, activeChits, checkLabel } from "../../services/pos";
+import { LATE_MS, NEW_CHIT_MS, activeChits, checkLabel } from "../../services/pos";
 import { usePos } from "./PosProvider";
 
 export function KitchenView() {
@@ -8,7 +8,7 @@ export function KitchenView() {
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 30000);
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -50,11 +50,31 @@ export function KitchenView() {
             const check = checksById[chit.checkId];
             const late = age(chit) >= LATE_MS;
             const mins = Math.max(0, Math.floor(age(chit) / 60000));
+            const takeaway = check?.channel === "takeaway";
+            const fresh = age(chit) < NEW_CHIT_MS;
+            const className = [
+              "till-chit",
+              chit.more ? "more" : "",
+              takeaway ? "takeaway" : "",
+              fresh ? "flash" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
             return (
-              <article key={chit.id} className={chit.more ? "till-chit more" : "till-chit"}>
+              <article key={chit.id} className={className}>
                 <div className="till-identity">
-                  {check ? checkLabel(check) : chit.checkId}
-                  {chit.more ? " · MORE" : ""}
+                  {takeaway ? (
+                    <>
+                      <span className="till-queue">{check.queueNumber}</span>
+                      {check.guestName ? <span className="till-chit-name">{check.guestName}</span> : null}
+                      {chit.more ? <span className="till-more-badge">MORE</span> : null}
+                    </>
+                  ) : (
+                    <>
+                      {check ? checkLabel(check) : chit.checkId}
+                      {chit.more ? " · MORE" : ""}
+                    </>
+                  )}
                 </div>
                 <div className={late ? "till-timer late" : "till-timer"}>{mins}m</div>
                 <ul className="till-chit-lines">
@@ -64,11 +84,7 @@ export function KitchenView() {
                     </li>
                   ))}
                 </ul>
-                <button
-                  type="button"
-                  className="till-primary"
-                  onClick={() => bump(chit.id)}
-                >
+                <button type="button" className="till-primary" onClick={() => bump(chit.id)}>
                   Bump
                 </button>
               </article>

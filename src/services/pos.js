@@ -410,4 +410,100 @@ export function rejectClaim(state, tableId) {
   };
 }
 
+export function lastChitForCheck(state, checkId) {
+  const chits = state.chits.filter((c) => c.checkId === checkId);
+  return chits.length ? chits[chits.length - 1] : null;
+}
+
+export function canVoidLastSend(state, checkId) {
+  const check = state.checks.find((c) => c.id === checkId);
+  if (!check || check.status === "paid") return false;
+  const last = lastChitForCheck(state, checkId);
+  return Boolean(last && last.status === "active");
+}
+
+export function voidLastSend(state, checkId) {
+  const check = state.checks.find((c) => c.id === checkId);
+  if (!check || check.status === "paid") {
+    return { ok: false, error: "Nothing to void.", state };
+  }
+  const last = lastChitForCheck(state, checkId);
+  if (!last) {
+    return { ok: false, error: "Nothing to void.", state };
+  }
+  if (last.status !== "active") {
+    return { ok: false, error: "Kitchen already bumped that Send.", state };
+  }
+
+  const remainingLines = subtractLines(check.lines, last.lines);
+  const chits = state.chits.filter((c) => c.id !== last.id);
+  const lastBumpedChitId = state.lastBumpedChitId === last.id ? null : state.lastBumpedChitId;
+
+  if (remainingLines.length === 0) {
+    return {
+      ok: true,
+      error: null,
+      state: {
+        ...state,
+        checks: state.checks.filter((c) => c.id !== checkId),
+        chits: chits.filter((c) => c.checkId !== checkId),
+        lastBumpedChitId,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      checks: state.checks.map((c) => (c.id === checkId ? { ...c, lines: remainingLines } : c)),
+      chits,
+      lastBumpedChitId,
+    },
+  };
+}
+
+export function moveTargets(_state, tables, fromTableId) {
+  return tables.filter((id) => id !== fromTableId);
+}
+
+export function moveTable(state, fromTableId, toTableId, tables) {
+  if (!tables.includes(toTableId) || fromTableId === toTableId) {
+    return { ok: false, error: "Pick a different table.", state };
+  }
+  const source = openCheckForTable(state.checks, fromTableId);
+  const dest = openCheckForTable(state.checks, toTableId);
+  const sourceClaim = state.guestClaims?.[fromTableId];
+  const destClaim = state.guestClaims?.[toTableId];
+  if (!source && !sourceClaim) {
+    return { ok: false, error: "Nothing to move.", state };
+  }
+
+  let checks = state.checks;
+  let chits = state.chits;
+
+  if (source && dest) {
+    const mergedLines = mergeLines(dest.lines, source.lines);
+    const destHasChits = state.chits.some((c) => c.checkId === dest.id);
+    checks = state.checks
+      .filter((c) => c.id !== source.id)
+      .map((c) => (c.id === dest.id ? { ...c, lines: mergedLines } : c));
+    chits = state.chits.map((c) =>
+      c.checkId === source.id ? { ...c, checkId: dest.id, more: destHasChits ? true : c.more } : c
+    );
+  } else if (source) {
+    checks = state.checks.map((c) => (c.id === source.id ? { ...c, tableId: toTableId } : c));
+  }
+
+  const guestClaims = { ...(state.guestClaims ?? {}) };
+  if (sourceClaim) {
+    delete guestClaims[fromTableId];
+    if (!destClaim) guestClaims[toTableId] = sourceClaim;
+  }
+
+  return { ok: true, error: null, state: { ...state, checks, chits, guestClaims } };
+}
+
 export const LATE_MS = 8 * 60 * 1000;
+export const NEW_CHIT_MS = 4000;

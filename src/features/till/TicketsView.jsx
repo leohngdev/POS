@@ -1,9 +1,11 @@
 import { useState } from "react";
 import {
+  canVoidLastSend,
   checkFloorStatus,
   checkLabel,
   checkTotal,
   money,
+  moveTargets,
   openCheckForTable,
   pendingGuestTables,
   tableClaimStatus,
@@ -11,6 +13,7 @@ import {
 import { usePos } from "./PosProvider";
 import { BillPanel } from "./BillPanel";
 import { ClaimActions } from "./ClaimActions";
+import { TableOps } from "./TableOps";
 
 function TicketCard({ title, detail, chip, selected, claimed, collapsed, paid, onSelect }) {
   return (
@@ -27,10 +30,11 @@ function TicketCard({ title, detail, chip, selected, claimed, collapsed, paid, o
 }
 
 export function TicketsView() {
-  const { state, venue, pay, accept, reject } = usePos();
+  const { state, venue, pay, accept, reject, move, voidSend } = usePos();
   const [selectedId, setSelectedId] = useState(null);
   const [waitTable, setWaitTable] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [moving, setMoving] = useState(false);
 
   const waiting = pendingGuestTables(state, venue.tables);
   const waitingSet = new Set(waiting);
@@ -63,6 +67,7 @@ export function TicketsView() {
     setSelectedId(id);
     setWaitTable(null);
     setNotice(null);
+    setMoving(false);
   }
 
   function pickWait(tableId) {
@@ -70,6 +75,7 @@ export function TicketsView() {
     setSelectedId(check?.id ?? null);
     setWaitTable(tableId);
     setNotice(null);
+    setMoving(false);
   }
 
   return (
@@ -176,7 +182,41 @@ export function TicketsView() {
               setWaitTable(null);
             }}
           />
-          {notice ? <p className="till-ok">{notice}</p> : null}
+          <TableOps
+            showMove={Boolean(claimTableId && (selected?.channel === "dine-in" || waitTable) && selected?.status !== "paid")}
+            targets={claimTableId ? moveTargets(state, venue.tables, claimTableId) : []}
+            moving={moving}
+            onToggleMove={() => setMoving((m) => !m)}
+            onMoveTo={(id) => {
+              move(claimTableId, id).then((result) => {
+                if (!result.ok) {
+                  setNotice(result.error);
+                  return;
+                }
+                setWaitTable(waitTable ? id : null);
+                setMoving(false);
+                setNotice(`Moved to ${id}`);
+              });
+            }}
+            canVoid={selected ? canVoidLastSend(state, selected.id) : false}
+            onVoid={
+              selected?.status === "open"
+                ? () => {
+                    voidSend(selected.id).then((result) => {
+                      if (!result.ok) {
+                        setNotice(result.error);
+                        return;
+                      }
+                      if (!result.state.checks.some((c) => c.id === selected.id)) {
+                        setSelectedId(null);
+                      }
+                      setNotice("Voided last Send");
+                    });
+                  }
+                : undefined
+            }
+          />
+          {notice ? <p className={notice.startsWith("Marked") || notice.startsWith("Moved") || notice.startsWith("Voided") ? "till-ok" : "till-error"}>{notice}</p> : null}
           {selected?.status === "open" ? (
             <div className="till-pay-pair">
               <button type="button" className="till-primary" onClick={() => settle("card")}>

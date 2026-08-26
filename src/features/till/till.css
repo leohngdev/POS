@@ -91,6 +91,22 @@
 
 .till-ghost:disabled { opacity: 0.4; }
 
+.till-inline {
+  margin-left: 0;
+  width: 100%;
+}
+
+.till-table-ops {
+  display: grid;
+  gap: 8px;
+}
+
+.till-move-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .till-shell {
   display: grid;
   grid-template-columns: 140px 1fr 300px;
@@ -361,6 +377,35 @@
 .till-timer.late { color: #9b2c1a; font-weight: 700; }
 .till-chit-lines { margin: 0; padding-left: 1.1em; font-size: 16px; }
 
+.till-chit.takeaway .till-queue {
+  display: block;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.till-chit-name,
+.till-more-badge {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.till-chit.flash {
+  animation: till-chit-in 0.9s ease;
+}
+
+@keyframes till-chit-in {
+  from {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-primary) 45%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
 .till-settings {
   display: grid;
   gap: var(--space-4);
@@ -389,6 +434,24 @@
   display: grid;
   gap: 6px;
   justify-items: stretch;
+}
+
+.till-map .till-table-cell {
+  flex: 0 0 88px;
+  width: 88px;
+  max-width: 88px;
+}
+
+.till-map .till-claim-actions {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.till-map .till-accept,
+.till-map .till-reject {
+  min-width: 0;
+  padding: 4px 2px;
+  font-size: 11px;
 }
 
 .till-claim-tag {

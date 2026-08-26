@@ -20,6 +20,11 @@ import {
   acceptClaim,
   tableClaimStatus,
   pendingGuestTables,
+  moveTable,
+  moveTargets,
+  voidLastSend,
+  canVoidLastSend,
+  checkLabel,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -329,5 +334,155 @@ describe("Guest claim", () => {
     const legacy = { ...createInitialState(), guestClaims: { "04": { at: 1 } } };
     expect(tableClaimStatus(legacy, "04")).toBe("pending");
     expect(pendingGuestTables(legacy, VENUE.tables)).toEqual(["04"]);
+  });
+});
+
+describe("Move table and void last Send", () => {
+  it("moves an open check and its claim to a free table", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const sent = send({
+      state: claimed.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 2,
+      requireClaim: true,
+    });
+    const moved = moveTable(sent.state, "04", "06", VENUE.tables);
+    expect(moved.ok).toBe(true);
+    expect(openCheckForTable(moved.state.checks, "04")).toBe(null);
+    expect(openCheckForTable(moved.state.checks, "06").id).toBe("CHK-1");
+    expect(tableClaimStatus(moved.state, "04")).toBe(null);
+    expect(tableClaimStatus(moved.state, "06")).toBe("pending");
+    expect(checkLabel(openCheckForTable(moved.state.checks, "06"))).toBe("Table 06");
+    expect(moved.state.chits[0].checkId).toBe("CHK-1");
+  });
+
+  it("moves a claim with no order yet", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const moved = moveTable(claimed.state, "04", "08", VENUE.tables);
+    expect(tableClaimStatus(moved.state, "08")).toBe("pending");
+    expect(tableClaimStatus(moved.state, "04")).toBe(null);
+  });
+
+  it("merges onto a table that already has an open check", () => {
+    const a = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const b = send({
+      state: a.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "05",
+      lines: compactLines({ kimchi: 1 }, VENUE.menu),
+      now: 2,
+    });
+    const moved = moveTable(b.state, "04", "05", VENUE.tables);
+    expect(moved.ok).toBe(true);
+    expect(openCheckForTable(moved.state.checks, "04")).toBe(null);
+    const dest = openCheckForTable(moved.state.checks, "05");
+    expect(dest.id).toBe("CHK-2");
+    expect(dest.lines.map((l) => l.itemId).sort()).toEqual(["kimchi", "wagyu"]);
+    expect(moved.state.chits).toHaveLength(2);
+    expect(moved.state.chits.every((c) => c.checkId === dest.id)).toBe(true);
+    expect(moved.state.chits.find((c) => c.id === "CHIT-1").more).toBe(true);
+    expect(checkLabel(dest)).toBe("Table 05");
+  });
+
+  it("keeps the destination guest when merging onto a claimed table", () => {
+    const claimed = claimTable(createInitialState(), "05", VENUE.tables, 1);
+    const dest = send({
+      state: claimed.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "05",
+      lines: compactLines({ kimchi: 1 }, VENUE.menu),
+      now: 2,
+      requireClaim: true,
+    });
+    const source = send({
+      state: dest.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 3,
+    });
+    const moved = moveTable(source.state, "04", "05", VENUE.tables);
+    expect(tableClaimStatus(moved.state, "05")).toBe("pending");
+    expect(tableClaimStatus(moved.state, "04")).toBe(null);
+    expect(openCheckForTable(moved.state.checks, "05").lines).toHaveLength(2);
+  });
+
+  it("lists every other table as a move target", () => {
+    const claimed = claimTable(createInitialState(), "05", VENUE.tables, 1);
+    const sent = send({
+      state: claimed.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 2,
+    });
+    expect(moveTargets(sent.state, VENUE.tables, "04")).toEqual(["01", "02", "03", "05", "06", "07", "08"]);
+  });
+
+  it("voids the last unbumped Send and keeps earlier lines", () => {
+    const first = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const second = send({
+      state: first.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines: compactLines({ kimchi: 1 }, VENUE.menu),
+      now: 2,
+    });
+    expect(canVoidLastSend(second.state, "CHK-1")).toBe(true);
+    const voided = voidLastSend(second.state, "CHK-1");
+    expect(voided.ok).toBe(true);
+    expect(voided.state.chits).toHaveLength(1);
+    expect(voided.state.checks[0].lines).toEqual(lines);
+  });
+
+  it("drops the check when the only Send is voided", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const voided = voidLastSend(sent.state, "CHK-1");
+    expect(voided.state.checks).toHaveLength(0);
+    expect(voided.state.chits).toHaveLength(0);
+  });
+
+  it("refuses to void after kitchen bumped that Send", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const bumped = bumpChit(sent.state, sent.state.chits[0].id, 3);
+    const voided = voidLastSend(bumped.state, "CHK-1");
+    expect(voided.ok).toBe(false);
+    expect(bumped.state.chits).toHaveLength(1);
   });
 });
