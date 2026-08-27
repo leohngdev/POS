@@ -119,7 +119,7 @@ describe("persist", () => {
     const loaded = fromSnapshot(toSnapshot(custom), createInitialState());
     expect(loaded.venue.name).toBe("Hanok");
     expect(loaded.venue.pin).toBe("4321");
-    expect(loaded.venue.tables).toEqual(["01", "02"]);
+    expect(loaded.venue.tables.map((t) => (typeof t === "string" ? t : t.id))).toEqual(["01", "02"]);
     expect(loaded.venue.menu[0].name).toBe("Barley tea");
   });
 

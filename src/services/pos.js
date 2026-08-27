@@ -24,19 +24,46 @@ export function checkSubtotal(check) {
   return roundMoney((check.lines ?? []).reduce((sum, line) => sum + lineTotal(line), 0));
 }
 
+export function checkOffers(check) {
+  if (Array.isArray(check.offers) && check.offers.length) return check.offers;
+  const rate = Number(check.discountRate) || 0;
+  if (rate > 0) return [{ id: "legacy", name: "Discount", kind: "percent", value: rate }];
+  return [];
+}
+
 export function checkDiscount(check) {
-  return roundMoney(checkSubtotal(check) * clampRate(Number(check.discountRate) || 0, 0));
+  let left = checkSubtotal(check);
+  let taken = 0;
+  for (const offer of checkOffers(check)) {
+    let cut = 0;
+    if (offer.kind === "amount") cut = Math.min(left, roundMoney(Number(offer.value) || 0));
+    else cut = roundMoney(left * clampRate(Number(offer.value) || 0, 0));
+    taken += cut;
+    left = roundMoney(Math.max(0, left - cut));
+  }
+  return roundMoney(taken);
 }
 
 export function checkNet(check) {
   return roundMoney(checkSubtotal(check) - checkDiscount(check));
 }
 
-export function checkTotal(check, venue) {
+export function activeSurchargeRate(venue, at = Date.now()) {
+  if (!venue?.surchargeEnabled) return 0;
+  const days = venue.surchargeByDay;
+  if (Array.isArray(days) && days.length === 7) {
+    return clampRate(Number(days[new Date(at).getDay()]), 0);
+  }
+  return clampRate(Number(venue.surchargeRate) || 0, 0);
+}
+
+export function checkTotal(check, venue, at) {
+  if (check.status === "paid" && check.closedTotal != null) return Number(check.closedTotal);
   const net = checkNet(check);
   let total = net;
   if (venue.gstEnabled) total += net * venue.gstRate;
-  if (venue.surchargeEnabled) total += net * venue.surchargeRate;
+  const sur = activeSurchargeRate(venue, at ?? Date.now());
+  if (sur) total += net * sur;
   return roundMoney(total);
 }
 
@@ -56,6 +83,44 @@ export function clampRate(n, fallback) {
   return Math.min(1, Math.max(0, n));
 }
 
+export const TABLE_W = 88;
+export const TABLE_H = 64;
+export const TABLE_GAP = 16;
+export const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function padTableId(raw) {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  const n = Number(digits);
+  if (!Number.isInteger(n) || n < 0) return null;
+  return n > 99 ? String(n) : String(n).padStart(2, "0");
+}
+
+export function layoutTable(id, index) {
+  const col = index % 4;
+  const row = Math.floor(index / 4);
+  return {
+    id,
+    x: col * (TABLE_W + TABLE_GAP),
+    y: row * (TABLE_H + TABLE_GAP),
+    seats: 4,
+    shape: "square",
+  };
+}
+
+export function normalizeTable(raw, index = 0) {
+  if (typeof raw === "string") return layoutTable(raw, index);
+  if (!raw || typeof raw !== "object") return layoutTable(padTableId(index + 1) ?? "01", index);
+  const id = padTableId(raw.id) ?? padTableId(raw.label) ?? layoutTable("01", index).id;
+  return {
+    id,
+    x: Number.isFinite(Number(raw.x)) ? Number(raw.x) : layoutTable(id, index).x,
+    y: Number.isFinite(Number(raw.y)) ? Number(raw.y) : layoutTable(id, index).y,
+    seats: Math.min(20, Math.max(1, Math.floor(Number(raw.seats) || 4))),
+    shape: raw.shape === "round" ? "round" : "square",
+  };
+}
+
 export function clampCovers(n) {
   const v = Math.floor(Number(n));
   if (!Number.isFinite(v)) return 0;
@@ -64,24 +129,46 @@ export function clampCovers(n) {
 
 export function makeTables(count) {
   const n = Math.min(40, Math.max(1, Math.floor(Number(count) || 1)));
-  return Array.from({ length: n }, (_, i) => String(i + 1).padStart(2, "0"));
+  return Array.from({ length: n }, (_, i) => layoutTable(String(i + 1).padStart(2, "0"), i));
+}
+
+function normalizeOffer(raw) {
+  if (!raw || !raw.name) return null;
+  const kind = raw.kind === "amount" ? "amount" : "percent";
+  const value =
+    kind === "amount"
+      ? Math.max(0, roundMoney(Number(raw.value) || 0))
+      : clampRate(Number(raw.value) || 0, 0);
+  return {
+    id: String(raw.id || menuIdFromName(raw.name, [])),
+    name: String(raw.name).trim(),
+    kind,
+    value,
+  };
 }
 
 export function defaultVenue() {
+  const tables = VENUE.tables.map((id, i) => layoutTable(id, i));
   return {
     name: VENUE.name,
     pin: VENUE.pin,
-    tables: [...VENUE.tables],
+    tables,
     menu: VENUE.menu.map((i) => ({
       id: i.id,
       name: i.name,
       unitPrice: i.unitPrice,
       soldOut: Boolean(i.soldOut),
+      photo: i.photo ?? null,
     })),
     gstEnabled: VENUE.gstEnabled,
     gstRate: VENUE.gstRate,
     surchargeEnabled: VENUE.surchargeEnabled,
     surchargeRate: VENUE.surchargeRate,
+    surchargeByDay: [0, 1, 2, 3, 4, 5, 6].map(() => VENUE.surchargeRate),
+    offers: [],
+    askTakeawayPhone: false,
+    askTakeawayEmail: false,
+    lockMins: 0,
   };
 }
 
@@ -96,22 +183,40 @@ export function normalizeVenue(raw) {
           name: String(i.name),
           unitPrice: Math.max(0, Number(i.unitPrice) || 0),
           soldOut: Boolean(i.soldOut),
+          photo: typeof i.photo === "string" && i.photo.startsWith("data:") ? i.photo : null,
         }))
     : null;
-  const tables =
-    Array.isArray(raw.tables) && raw.tables.length
-      ? raw.tables.map((t) => String(t)).filter(Boolean)
-      : base.tables;
+  const tables = Array.isArray(raw.tables) && raw.tables.length
+    ? raw.tables.map((t, i) => normalizeTable(t, i))
+    : base.tables;
+  const seen = new Set();
+  const unique = [];
+  for (const t of tables) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id);
+    unique.push(t);
+  }
+  const offers = Array.isArray(raw.offers) ? raw.offers.map(normalizeOffer).filter(Boolean) : base.offers;
+  const surchargeByDay =
+    Array.isArray(raw.surchargeByDay) && raw.surchargeByDay.length === 7
+      ? raw.surchargeByDay.map((n) => clampRate(Number(n), base.surchargeRate))
+      : [0, 1, 2, 3, 4, 5, 6].map(() =>
+          raw.surchargeRate === undefined ? base.surchargeRate : clampRate(Number(raw.surchargeRate), base.surchargeRate)
+        );
   return {
     name: String(raw.name ?? base.name).trim() || base.name,
     pin: String(raw.pin ?? base.pin) || base.pin,
-    tables,
+    tables: unique.length ? unique : base.tables,
     menu: menu && menu.length ? menu : base.menu,
     gstEnabled: Boolean(raw.gstEnabled ?? base.gstEnabled),
     gstRate: raw.gstRate === undefined ? base.gstRate : clampRate(Number(raw.gstRate), base.gstRate),
     surchargeEnabled: Boolean(raw.surchargeEnabled ?? base.surchargeEnabled),
-    surchargeRate:
-      raw.surchargeRate === undefined ? base.surchargeRate : clampRate(Number(raw.surchargeRate), base.surchargeRate),
+    surchargeRate: surchargeByDay[1],
+    surchargeByDay,
+    offers,
+    askTakeawayPhone: Boolean(raw.askTakeawayPhone),
+    askTakeawayEmail: Boolean(raw.askTakeawayEmail),
+    lockMins: [0, 5, 10, 30].includes(Number(raw.lockMins)) ? Number(raw.lockMins) : 0,
   };
 }
 
@@ -120,6 +225,10 @@ export function isCustomVenue(venue) {
 }
 
 export function liveTables(venue) {
+  return normalizeVenue(venue).tables.map((t) => t.id);
+}
+
+export function tableRecords(venue) {
   return normalizeVenue(venue).tables;
 }
 
@@ -133,6 +242,7 @@ export function createInitialState() {
     pinError: null,
     checks: [],
     chits: [],
+    receipts: [],
     nextCheck: 1,
     nextChit: 1,
     nextTakeaway: 1,
@@ -155,6 +265,10 @@ export function updateVenueTaxes(state, patch) {
   if (patch.gstRate !== undefined) next.gstRate = patch.gstRate;
   if (patch.surchargeEnabled !== undefined) next.surchargeEnabled = patch.surchargeEnabled;
   if (patch.surchargeRate !== undefined) next.surchargeRate = patch.surchargeRate;
+  if (patch.surchargeByDay !== undefined) next.surchargeByDay = patch.surchargeByDay;
+  if (patch.askTakeawayPhone !== undefined) next.askTakeawayPhone = patch.askTakeawayPhone;
+  if (patch.askTakeawayEmail !== undefined) next.askTakeawayEmail = patch.askTakeawayEmail;
+  if (patch.lockMins !== undefined) next.lockMins = patch.lockMins;
   return updateVenue(state, next);
 }
 
@@ -174,14 +288,77 @@ export function setPin(state, pin) {
 
 export function setTableCount(state, count) {
   const tables = makeTables(count);
+  const nextIds = new Set(tables.map((t) => t.id));
   const current = liveTables(state.venue);
-  const disappearing = current.filter((id) => !tables.includes(id));
+  const disappearing = current.filter((id) => !nextIds.has(id));
   for (const id of disappearing) {
     if (openCheckForTable(state.checks, id) || state.guestClaims?.[id]) {
       return { ok: false, error: `Table ${id} still has a check or guest.`, state };
     }
   }
   return { ok: true, error: null, state: updateVenue(state, { tables }) };
+}
+
+export function addTable(state, rawId) {
+  const id = padTableId(rawId);
+  if (!id) return { ok: false, error: "Give the table a number.", state };
+  const venue = normalizeVenue(state.venue);
+  if (venue.tables.some((t) => t.id === id)) {
+    return { ok: false, error: `Table ${id} is already on the floor.`, state };
+  }
+  if (venue.tables.length >= 40) return { ok: false, error: "Forty tables is the cap.", state };
+  const tables = [...venue.tables, layoutTable(id, venue.tables.length)];
+  return { ok: true, error: null, state: updateVenue(state, { tables }) };
+}
+
+export function removeTable(state, tableId) {
+  if (openCheckForTable(state.checks, tableId) || state.guestClaims?.[tableId]) {
+    return { ok: false, error: `Table ${tableId} still has a check or guest.`, state };
+  }
+  const venue = normalizeVenue(state.venue);
+  if (venue.tables.length <= 1) return { ok: false, error: "Keep at least one table.", state };
+  if (!venue.tables.some((t) => t.id === tableId)) {
+    return { ok: false, error: "No such table.", state };
+  }
+  return {
+    ok: true,
+    error: null,
+    state: updateVenue(state, { tables: venue.tables.filter((t) => t.id !== tableId) }),
+  };
+}
+
+export function patchTable(state, tableId, patch) {
+  const venue = normalizeVenue(state.venue);
+  if (!venue.tables.some((t) => t.id === tableId)) {
+    return { ok: false, error: "No such table.", state };
+  }
+  const tables = venue.tables.map((t) => (t.id === tableId ? normalizeTable({ ...t, ...patch, id: t.id }) : t));
+  return { ok: true, error: null, state: updateVenue(state, { tables }) };
+}
+
+export function addOffer(state, draft) {
+  const offer = normalizeOffer({ ...draft, id: draft.id || menuIdFromName(draft.name || "offer", []) });
+  if (!offer || !offer.name) return { ok: false, error: "Name the discount.", state };
+  if (offer.kind === "amount" && !(offer.value > 0)) return { ok: false, error: "Enter a dollar amount.", state };
+  if (offer.kind === "percent" && !(offer.value > 0)) return { ok: false, error: "Enter a percent.", state };
+  const venue = normalizeVenue(state.venue);
+  if (venue.offers.some((o) => o.id === offer.id)) offer.id = `${offer.id}-${venue.offers.length + 1}`;
+  return { ok: true, error: null, state: updateVenue(state, { offers: [...venue.offers, offer] }) };
+}
+
+export function removeOffer(state, offerId) {
+  const venue = normalizeVenue(state.venue);
+  return {
+    ok: true,
+    error: null,
+    state: updateVenue(state, { offers: venue.offers.filter((o) => o.id !== offerId) }),
+  };
+}
+
+export function patchOffer(state, offerId, patch) {
+  const venue = normalizeVenue(state.venue);
+  const offers = venue.offers.map((o) => (o.id === offerId ? normalizeOffer({ ...o, ...patch, id: o.id }) : o)).filter(Boolean);
+  return { ok: true, error: null, state: updateVenue(state, { offers }) };
 }
 
 function menuIdFromName(name, menu) {
@@ -208,6 +385,7 @@ export function addMenuItem(state, { name, unitPrice }) {
     name: trimmed,
     unitPrice: roundMoney(price),
     soldOut: false,
+    photo: null,
   };
   return { ok: true, error: null, state: updateVenue(state, { menu: [...venue.menu, item] }) };
 }
@@ -223,7 +401,8 @@ export function patchMenuItem(state, itemId, patch) {
     const unitPrice =
       patch.unitPrice != null ? Math.max(0, roundMoney(Number(patch.unitPrice) || 0)) : item.unitPrice;
     const soldOut = patch.soldOut != null ? Boolean(patch.soldOut) : item.soldOut;
-    return { ...item, name, unitPrice, soldOut };
+    const photo = patch.photo !== undefined ? patch.photo : item.photo;
+    return { ...item, name, unitPrice, soldOut, photo };
   });
   return { ok: true, error: null, state: updateVenue(state, { menu }) };
 }
@@ -280,7 +459,22 @@ export function pendingGuestTables(state, tables) {
   return tables.filter((id) => tableClaimStatus(state, id) === "pending");
 }
 
-export function send({ state, venue, channel, tableId, queueNumber, guestName, lines, now, requireClaim, covers, discountRate }) {
+export function send({
+  state,
+  venue,
+  channel,
+  tableId,
+  queueNumber,
+  guestName,
+  guestPhone,
+  guestEmail,
+  lines,
+  now,
+  requireClaim,
+  covers,
+  discountRate,
+  offers,
+}) {
   if (!lines.length) {
     return { ok: false, error: "Add at least one item before Send.", state };
   }
@@ -305,6 +499,7 @@ export function send({ state, venue, channel, tableId, queueNumber, guestName, l
         source,
         covers,
         discountRate,
+        offers,
       });
     } else if (existing.status === "paid") {
       return { ok: false, error: "This check is closed.", state };
@@ -325,21 +520,41 @@ export function send({ state, venue, channel, tableId, queueNumber, guestName, l
     source: "staff",
     covers: 0,
     discountRate,
+    offers,
+    guestPhone,
+    guestEmail,
   });
 }
 
-function sendNewCheck({ state, channel, tableId, queueNumber, guestName, lines, now, source, covers, discountRate }) {
+function sendNewCheck({
+  state,
+  channel,
+  tableId,
+  queueNumber,
+  guestName,
+  guestPhone,
+  guestEmail,
+  lines,
+  now,
+  source,
+  covers,
+  discountRate,
+  offers,
+}) {
   const check = {
     id: nextId("CHK", state.nextCheck),
     channel,
     tableId,
     queueNumber,
     guestName,
+    guestPhone: guestPhone?.trim() ? guestPhone.trim() : null,
+    guestEmail: guestEmail?.trim() ? guestEmail.trim() : null,
     status: "open",
     lines: lines.map((l) => ({ ...l })),
     paidVia: null,
     covers: channel === "dine-in" ? clampCovers(covers) : 0,
     discountRate: clampRate(Number(discountRate) || 0, 0),
+    offers: Array.isArray(offers) ? offers.map(normalizeOffer).filter(Boolean) : [],
     payments: [],
   };
   const chit = makeChit({
@@ -447,23 +662,28 @@ export function tender(state, checkId, via, amount) {
   const remaining = roundMoney(due - payAmt);
   const closed = remaining <= 0;
   const vias = [...new Set(payments.map((p) => p.via))];
-  return {
-    ok: true,
-    error: null,
-    state: {
-      ...state,
-      checks: state.checks.map((c) =>
-        c.id === checkId
-          ? {
-              ...c,
-              payments,
-              status: closed ? "paid" : "open",
-              paidVia: closed ? (vias.length === 1 ? vias[0] : "split") : null,
-            }
-          : c
-      ),
-    },
+  const paidVia = closed ? (vias.length === 1 ? vias[0] : "split") : null;
+  const closedTotal = closed ? checkTotal({ ...check, payments, status: "open" }, venue) : check.closedTotal;
+  let next = {
+    ...state,
+    checks: state.checks.map((c) =>
+      c.id === checkId
+        ? {
+            ...c,
+            payments,
+            status: closed ? "paid" : "open",
+            paidVia,
+            closedTotal: closed ? closedTotal : c.closedTotal,
+            closedAt: closed ? Date.now() : c.closedAt,
+          }
+        : c
+    ),
   };
+  if (closed) {
+    const paid = next.checks.find((c) => c.id === checkId);
+    next = archiveReceipt(next, paid, venue);
+  }
+  return { ok: true, error: null, state: next };
 }
 
 export function setCheckCovers(state, checkId, covers) {
@@ -480,7 +700,23 @@ export function setCheckCovers(state, checkId, covers) {
   };
 }
 
-export function setCheckDiscount(state, checkId, rate) {
+export function applyCheckOffer(state, checkId, offer) {
+  const check = state.checks.find((c) => c.id === checkId);
+  if (!check || check.status === "paid") return { ok: false, error: "No open check.", state };
+  const nextOffer = normalizeOffer(offer);
+  if (!nextOffer) return { ok: false, error: "Pick a discount.", state };
+  const offers = [...checkOffers(check).filter((o) => o.id !== nextOffer.id), nextOffer];
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      checks: state.checks.map((c) => (c.id === checkId ? { ...c, offers, discountRate: 0 } : c)),
+    },
+  };
+}
+
+export function removeCheckOffer(state, checkId, offerId) {
   const check = state.checks.find((c) => c.id === checkId);
   if (!check || check.status === "paid") return { ok: false, error: "No open check.", state };
   return {
@@ -489,10 +725,57 @@ export function setCheckDiscount(state, checkId, rate) {
     state: {
       ...state,
       checks: state.checks.map((c) =>
-        c.id === checkId ? { ...c, discountRate: clampRate(Number(rate) || 0, 0) } : c
+        c.id === checkId ? { ...c, offers: checkOffers(c).filter((o) => o.id !== offerId), discountRate: 0 } : c
       ),
     },
   };
+}
+
+export function setCheckDiscount(state, checkId, rate) {
+  const value = clampRate(Number(rate) || 0, 0);
+  if (!value) {
+    const check = state.checks.find((c) => c.id === checkId);
+    if (!check || check.status === "paid") return { ok: false, error: "No open check.", state };
+    return {
+      ok: true,
+      error: null,
+      state: {
+        ...state,
+        checks: state.checks.map((c) => (c.id === checkId ? { ...c, offers: [], discountRate: 0 } : c)),
+      },
+    };
+  }
+  return applyCheckOffer(state, checkId, { id: "comp", name: "Discount", kind: "percent", value });
+}
+
+export function makeReceipt(check, venue, at = Date.now()) {
+  const priced = { ...check, status: "open", closedTotal: undefined };
+  return {
+    id: check.id,
+    at,
+    channel: check.channel,
+    tableId: check.tableId,
+    queueNumber: check.queueNumber,
+    guestName: check.guestName,
+    guestPhone: check.guestPhone ?? null,
+    guestEmail: check.guestEmail ?? null,
+    lines: (check.lines ?? []).map((l) => ({ ...l })),
+    offers: checkOffers(check),
+    payments: [...(check.payments ?? [])],
+    paidVia: check.paidVia,
+    guests: Number(check.covers) || 0,
+    subtotal: checkSubtotal(check),
+    discount: checkDiscount(check),
+    total: check.closedTotal ?? checkTotal(priced, venue, at),
+    venueName: venue.name,
+  };
+}
+
+function archiveReceipt(state, check, venue) {
+  if (!check) return state;
+  const receipts = [...(state.receipts ?? [])];
+  if (receipts.some((r) => r.id === check.id)) return { ...state, receipts };
+  return { ...state, receipts: [makeReceipt(check, venue, check.closedAt ?? Date.now()), ...receipts].slice(0, 200) };
 }
 
 export function nightReport(state) {
@@ -510,6 +793,7 @@ export function nightReport(state) {
     openCount: open.length,
     sales: salesOf(paid),
     covers: paid.reduce((sum, c) => sum + (Number(c.covers) || 0), 0),
+    guests: paid.reduce((sum, c) => sum + (Number(c.covers) || 0), 0),
     card: viaOf("card"),
     cash: viaOf("cash"),
     split: viaOf("split"),
@@ -519,11 +803,16 @@ export function nightReport(state) {
 }
 
 export function endNight(state) {
+  const venue = normalizeVenue(state.venue);
+  let receipts = [...(state.receipts ?? [])];
+  for (const check of state.checks.filter((c) => c.status === "paid")) {
+    if (!receipts.some((r) => r.id === check.id)) {
+      receipts = [makeReceipt(check, venue, check.closedAt ?? Date.now()), ...receipts];
+    }
+  }
   const keep = state.checks.filter((c) => c.status !== "paid");
   const keepIds = new Set(keep.map((c) => c.id));
-  const lastBumpedChitId = keepIds.has(
-    state.chits.find((c) => c.id === state.lastBumpedChitId)?.checkId
-  )
+  const lastBumpedChitId = keepIds.has(state.chits.find((c) => c.id === state.lastBumpedChitId)?.checkId)
     ? state.lastBumpedChitId
     : null;
   return {
@@ -533,7 +822,9 @@ export function endNight(state) {
       ...state,
       checks: keep,
       chits: state.chits.filter((c) => keepIds.has(c.checkId)),
+      receipts: receipts.slice(0, 200),
       lastBumpedChitId,
+      guestClaims: {},
     },
   };
 }
@@ -607,13 +898,10 @@ export function nextQueueNumber(n) {
 }
 
 export function normalizeTableId(raw, tables) {
-  if (raw == null || raw === "") return null;
-  const digits = String(raw).replace(/\D/g, "");
-  if (!digits) return null;
-  const n = Number(digits);
-  if (!Number.isInteger(n) || n < 0) return null;
-  const padded = String(n).padStart(2, "0");
-  return tables.includes(padded) ? padded : null;
+  const padded = padTableId(raw);
+  if (!padded) return null;
+  const ids = Array.isArray(tables) ? tables.map((t) => (typeof t === "string" ? t : t.id)) : [];
+  return ids.includes(padded) ? padded : null;
 }
 
 export function claimTable(state, tableId, tables, now) {
@@ -777,12 +1065,12 @@ export function moveTable(state, fromTableId, toTableId, tables) {
     const mergedLines = mergeLines(dest.lines, source.lines);
     const destHasChits = state.chits.some((c) => c.checkId === dest.id);
     const covers = clampCovers((Number(dest.covers) || 0) + (Number(source.covers) || 0));
-    const discountRate = dest.discountRate || source.discountRate || 0;
+    const offers = [...checkOffers(dest), ...checkOffers(source).filter((o) => !checkOffers(dest).some((d) => d.id === o.id))];
     const payments = [...(dest.payments ?? []), ...(source.payments ?? [])];
     checks = state.checks
       .filter((c) => c.id !== source.id)
       .map((c) =>
-        c.id === dest.id ? { ...c, lines: mergedLines, covers, discountRate, payments } : c
+        c.id === dest.id ? { ...c, lines: mergedLines, covers, offers, discountRate: 0, payments } : c
       );
     chits = state.chits.map((c) =>
       c.checkId === source.id ? { ...c, checkId: dest.id, more: destHasChits ? true : c.more } : c

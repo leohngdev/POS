@@ -3,16 +3,22 @@ import {
   amountDue,
   compactLines,
   canVoidLastSend,
+  liveTables,
+  makeReceipt,
   moveTargets,
   openCheckForTable,
   tableClaimStatus,
   tableFloorStatus,
+  tableRecords,
 } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { MenuGrid } from "./MenuGrid";
 import { BillPanel, PayPad } from "./BillPanel";
 import { ClaimActions } from "./ClaimActions";
 import { TableOps } from "./TableOps";
+import { FloorMap } from "./FloorMap";
+import { OfferPad } from "./OfferPad";
+import { printReceipt } from "./Receipt";
 
 function bumpQty(map, id, delta) {
   const next = { ...map, [id]: Math.max(0, (map[id] ?? 0) + delta) };
@@ -20,7 +26,7 @@ function bumpQty(map, id, delta) {
   return next;
 }
 
-function tableClass(id, selected, claim, floor, small) {
+function tableClass(selected, claim, floor, small) {
   const parts = [small ? "till-table till-table-sm" : "till-table"];
   if (selected) parts.push("on");
   if (claim === "pending") parts.push("claimed");
@@ -29,31 +35,37 @@ function tableClass(id, selected, claim, floor, small) {
   return parts.join(" ");
 }
 
-function tableTags(claim, floor) {
-  const floorTag = floor === "cooking" ? "Cooking" : floor === "ready" ? "To pay" : null;
-  const guestTag = claim === "pending" ? "Guest" : claim === "accepted" ? "Seated" : null;
-  return { guestTag, floorTag: claim === "pending" ? null : floorTag };
-}
-
 export function DineInView() {
-  const { state, venue, sendOrder, reject, accept, move, voidSend, pay, setCovers, setDiscount } = usePos();
+  const {
+    state,
+    venue,
+    sendOrder,
+    reject,
+    accept,
+    move,
+    voidSend,
+    pay,
+    setCovers,
+    addCheckOffer,
+    dropCheckOffer,
+  } = usePos();
   const [tableId, setTableId] = useState(null);
   const [draft, setDraft] = useState({});
   const [notes, setNotes] = useState({});
   const [notice, setNotice] = useState(null);
   const [moving, setMoving] = useState(false);
-  const [draftCovers, setDraftCovers] = useState(0);
-  const [draftDiscount, setDraftDiscount] = useState(0);
+  const [draftGuests, setDraftGuests] = useState(0);
   const [tenderAmt, setTenderAmt] = useState("");
+  const ids = liveTables(venue);
+  const records = tableRecords(venue);
 
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
   const ordering = Boolean(tableId);
   const lines = useMemo(() => compactLines(draft, venue.menu, notes), [draft, venue.menu, notes]);
   const billLines = lines.length ? lines : openCheck?.lines ?? [];
   const selectedClaim = tableId ? tableClaimStatus(state, tableId) : null;
-  const targets = tableId ? moveTargets(state, venue.tables, tableId) : [];
-  const coversValue = openCheck ? openCheck.covers ?? 0 : draftCovers;
-  const discountPct = openCheck ? Math.round((openCheck.discountRate ?? 0) * 1000) / 10 : draftDiscount;
+  const targets = tableId ? moveTargets(state, ids, tableId) : [];
+  const guestsValue = openCheck ? openCheck.covers ?? 0 : draftGuests;
 
   function chooseTable(id) {
     setTableId(id);
@@ -63,8 +75,7 @@ export function DineInView() {
     setMoving(false);
     setTenderAmt("");
     const check = openCheckForTable(state.checks, id);
-    setDraftCovers(check?.covers ?? 0);
-    setDraftDiscount(Math.round((check?.discountRate ?? 0) * 1000) / 10);
+    setDraftGuests(check?.covers ?? 0);
   }
 
   function backToFloor() {
@@ -81,8 +92,7 @@ export function DineInView() {
       channel: "dine-in",
       tableId,
       lines,
-      covers: coversValue,
-      discountRate: discountPct / 100,
+      covers: guestsValue,
     }).then((result) => {
       if (!result.ok) {
         setNotice(result.error);
@@ -94,23 +104,13 @@ export function DineInView() {
     });
   }
 
-  function onCovers(raw) {
+  function onGuests(raw) {
     const n = Number(raw);
     if (openCheck) {
       setCovers(openCheck.id, n);
       return;
     }
-    setDraftCovers(n);
-  }
-
-  function onDiscount(raw) {
-    const n = Number(raw);
-    if (Number.isNaN(n)) return;
-    if (openCheck) {
-      setDiscount(openCheck.id, n / 100);
-      return;
-    }
-    setDraftDiscount(n);
+    setDraftGuests(n);
   }
 
   function settle(via) {
@@ -122,8 +122,15 @@ export function DineInView() {
         return;
       }
       setTenderAmt("");
-      setNotice(result.state.checks.find((c) => c.id === openCheck.id)?.status === "paid" ? `Paid · ${via}` : `Tendered ${via}`);
+      const next = result.state.checks.find((c) => c.id === openCheck.id);
+      setNotice(next?.status === "paid" ? `Paid · ${next.paidVia}` : `Tendered ${via}`);
     });
+  }
+
+  function reprint() {
+    if (!openCheck) return;
+    const receipt = (state.receipts ?? []).find((r) => r.id === openCheck.id) ?? makeReceipt(openCheck, venue);
+    printReceipt(receipt);
   }
 
   return (
@@ -132,31 +139,19 @@ export function DineInView() {
         {!ordering ? (
           <>
             <h1>Floor</h1>
-            {venue.tables.length === 0 ? (
-              <p className="till-empty">No tables configured</p>
-            ) : (
-              <div className="till-map">
-                {venue.tables.map((id) => {
-                  const claim = tableClaimStatus(state, id);
-                  const floor = tableFloorStatus(state, id);
-                  const { guestTag, floorTag } = tableTags(claim, floor);
-                  return (
-                    <div key={`${id}-${state.guestClaims?.[id]?.at ?? "open"}`} className="till-table-cell">
-                      <button
-                        type="button"
-                        className={tableClass(id, tableId === id, claim, floor, false)}
-                        onClick={() => chooseTable(id)}
-                      >
-                        {id}
-                        {guestTag ? <span className="till-claim-tag">{guestTag}</span> : null}
-                        {floorTag ? <span className="till-claim-tag">{floorTag}</span> : null}
-                      </button>
-                      <ClaimActions status={claim} onAccept={() => accept(id)} onReject={() => reject(id)} />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <FloorMap
+              tables={records}
+              state={state}
+              selectedId={tableId}
+              onSelect={chooseTable}
+              childrenFor={(table) => (
+                <ClaimActions
+                  status={tableClaimStatus(state, table.id)}
+                  onAccept={() => accept(table.id)}
+                  onReject={() => reject(table.id)}
+                />
+              )}
+            />
           </>
         ) : (
           <>
@@ -164,11 +159,11 @@ export function DineInView() {
               <button type="button" className="till-table till-table-sm" onClick={backToFloor}>
                 Floor
               </button>
-              {venue.tables.map((id) => (
+              {ids.map((id) => (
                 <button
                   key={id}
                   type="button"
-                  className={tableClass(id, tableId === id, tableClaimStatus(state, id), tableFloorStatus(state, id), true)}
+                  className={tableClass(tableId === id, tableClaimStatus(state, id), tableFloorStatus(state, id), true)}
                   onClick={() => chooseTable(id)}
                 >
                   {id}
@@ -227,27 +222,18 @@ export function DineInView() {
         {ordering ? (
           <div className="till-check-meta">
             <label className="till-name">
-              Covers
-              <input
-                type="number"
-                min="0"
-                max="99"
-                value={coversValue}
-                onChange={(e) => onCovers(e.target.value)}
-              />
-            </label>
-            <label className="till-name">
-              Discount %
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={discountPct}
-                onChange={(e) => onDiscount(e.target.value)}
-              />
+              Guests
+              <input type="number" min="0" max="99" value={guestsValue} onChange={(e) => onGuests(e.target.value)} />
             </label>
           </div>
+        ) : null}
+        {openCheck ? (
+          <OfferPad
+            venue={venue}
+            check={openCheck}
+            onAdd={(offer) => addCheckOffer(openCheck.id, offer)}
+            onRemove={(id) => dropCheckOffer(openCheck.id, id)}
+          />
         ) : null}
         {ordering ? (
           <ClaimActions status={selectedClaim} onAccept={() => accept(tableId)} onReject={() => reject(tableId)} />
@@ -292,6 +278,7 @@ export function DineInView() {
             onAmount={setTenderAmt}
             onPay={settle}
             disabled={openCheck.status !== "open"}
+            onPrint={reprint}
           />
         ) : null}
         {notice ? (

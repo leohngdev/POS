@@ -4,6 +4,7 @@ import { TakeawayView } from "./TakeawayView";
 import { TicketsView } from "./TicketsView";
 import { KitchenView } from "./KitchenView";
 import { SettingsView } from "./SettingsView";
+import { HistoryView } from "./HistoryView";
 import { usePos } from "./PosProvider";
 import { hasPendingGuestClaims } from "../../services/pos";
 
@@ -12,6 +13,7 @@ const NAV = [
   { id: "takeaway", label: "Takeaway" },
   { id: "tickets", label: "Tickets" },
   { id: "kitchen", label: "Kitchen" },
+  { id: "history", label: "History" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -46,6 +48,7 @@ export function TillShell() {
       {nav === "takeaway" ? <TakeawayView /> : null}
       {nav === "tickets" ? <TicketsView /> : null}
       {nav === "kitchen" ? <KitchenView /> : null}
+      {nav === "history" ? <HistoryView /> : null}
       {nav === "settings" ? <SettingsView /> : null}
     </div>
   );

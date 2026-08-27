@@ -15,6 +15,8 @@ export function TakeawayView() {
   const [draft, setDraft] = useState({});
   const [notes, setNotes] = useState({});
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [notice, setNotice] = useState(null);
   const queueNumber = nextQueueNumber(state.nextTakeaway);
   const lines = useMemo(() => compactLines(draft, venue.menu, notes), [draft, venue.menu, notes]);
@@ -25,6 +27,8 @@ export function TakeawayView() {
       tableId: null,
       queueNumber,
       guestName: name,
+      guestPhone: venue.askTakeawayPhone ? phone : undefined,
+      guestEmail: venue.askTakeawayEmail ? email : undefined,
       lines,
     });
     if (!result.ok) {
@@ -34,6 +38,8 @@ export function TakeawayView() {
       setDraft({});
       setNotes({});
       setName("");
+      setPhone("");
+      setEmail("");
     setNotice(`Sent ${queueNumber}`);
   }
 
@@ -79,6 +85,18 @@ export function TakeawayView() {
                 placeholder="Sarah"
               />
             </label>
+            {venue.askTakeawayPhone ? (
+              <label className="till-name">
+                Phone
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="04…" inputMode="tel" />
+              </label>
+            ) : null}
+            {venue.askTakeawayEmail ? (
+              <label className="till-name">
+                Email
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="sarah@…" inputMode="email" />
+              </label>
+            ) : null}
           </>
         }
         primaryLabel="Send"

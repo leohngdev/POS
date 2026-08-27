@@ -30,10 +30,15 @@ import {
   patchMenuItem,
   addMenuItem,
   setTableCount,
+  addTable,
+  removeTable,
   setPin,
   orderableMenu,
   nightReport,
   endNight,
+  applyCheckOffer,
+  addOffer,
+  liveTables,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -639,5 +644,68 @@ describe("Line notes, discount, tender, venue config", () => {
     expect(closed.state.checks).toHaveLength(1);
     expect(closed.state.checks[0].channel).toBe("takeaway");
     expect(closed.state.chits).toHaveLength(1);
+    expect(closed.state.receipts).toHaveLength(1);
+    expect(closed.state.guestClaims).toEqual({});
+  });
+
+  it("lets a floor skip table 04 and still add 17", () => {
+    let state = createInitialState();
+    for (const id of ["04", "06", "07", "08"]) {
+      state = removeTable(state, id).state;
+    }
+    const added = addTable(state, "17");
+    expect(added.ok).toBe(true);
+    expect(liveTables(added.state.venue)).toEqual(["01", "02", "03", "05", "17"]);
+    expect(normalizeTableId("17", liveTables(added.state.venue))).toBe("17");
+    expect(normalizeTableId("4", liveTables(added.state.venue))).toBe(null);
+  });
+
+  it("stacks a dollar coupon after a percent", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const withStaff = applyCheckOffer(sent.state, "CHK-1", { id: "staff", name: "Staff", kind: "percent", value: 0.5 });
+    const withCoupon = applyCheckOffer(withStaff.state, "CHK-1", { id: "ten", name: "$10 off", kind: "amount", value: 10 });
+    expect(checkDiscount(withCoupon.state.checks[0])).toBe(22);
+    expect(checkTotal(withCoupon.state.checks[0], withCoupon.state.venue)).toBe(2);
+  });
+
+  it("uses Saturday surcharge when the day is Saturday", () => {
+    const venue = updateVenueTaxes(createInitialState(), {
+      surchargeEnabled: true,
+      surchargeByDay: [0, 0, 0, 0, 0, 0, 0.1],
+    }).venue;
+    const check = { lines };
+    const sat = Date.parse("2026-08-29T12:00:00");
+    expect(new Date(sat).getDay()).toBe(6);
+    expect(checkTotal(check, venue, sat)).toBe(26.4);
+    expect(checkTotal(check, venue, Date.parse("2026-08-24T12:00:00"))).toBe(24);
+  });
+
+  it("clears a seated claim at end of night", () => {
+    const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1);
+    const seated = acceptClaim(claimed.state, "04");
+    expect(tableClaimStatus(seated.state, "04")).toBe("accepted");
+    const closed = endNight(seated.state);
+    expect(tableClaimStatus(closed.state, "04")).toBe(null);
+  });
+
+  it("writes a receipt when a check is paid", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const paid = payCheck(sent.state, "CHK-1", "cash");
+    expect(paid.state.receipts[0].id).toBe("CHK-1");
+    expect(paid.state.receipts[0].total).toBe(24);
   });
 });

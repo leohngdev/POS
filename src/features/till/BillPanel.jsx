@@ -1,8 +1,10 @@
 import {
   amountDue,
   amountPaid,
+  activeSurchargeRate,
   checkDiscount,
   checkNet,
+  checkOffers,
   checkSubtotal,
   checkTotal,
   lineKey,
@@ -24,9 +26,15 @@ export function CheckTotals({ check, venue }) {
         <span>Subtotal</span>
         <span>{money(sub)}</span>
       </div>
+      {checkOffers(check).map((offer) => (
+        <div key={offer.id}>
+          <span>{offer.name}</span>
+          <span>{offer.kind === "amount" ? money(offer.value) : `${Math.round(offer.value * 100)}%`}</span>
+        </div>
+      ))}
       {discount > 0 ? (
         <div>
-          <span>Discount</span>
+          <span>Taken off</span>
           <span>−{money(discount)}</span>
         </div>
       ) : null}
@@ -36,10 +44,10 @@ export function CheckTotals({ check, venue }) {
           <span>{money(net * venue.gstRate)}</span>
         </div>
       ) : null}
-      {venue.surchargeEnabled ? (
+      {activeSurchargeRate(venue) > 0 ? (
         <div>
           <span>Surcharge</span>
-          <span>{money(net * venue.surchargeRate)}</span>
+          <span>{money(net * activeSurchargeRate(venue))}</span>
         </div>
       ) : null}
       {paid > 0 && check.status !== "paid" ? (
@@ -56,7 +64,7 @@ export function CheckTotals({ check, venue }) {
   );
 }
 
-export function PayPad({ due, amount, onAmount, onPay, disabled }) {
+export function PayPad({ due, amount, onAmount, onPay, disabled, onPrint }) {
   return (
     <div className="till-pay">
       <label className="till-name">
@@ -78,6 +86,11 @@ export function PayPad({ due, amount, onAmount, onPay, disabled }) {
           Cash
         </button>
       </div>
+      {onPrint ? (
+        <button type="button" className="till-ghost till-inline" onClick={onPrint}>
+          Print receipt
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -93,7 +106,7 @@ export function BillPanel({
   extra,
   children,
 }) {
-  const bill = check ? { ...check, lines: lines.length ? lines : check.lines } : { lines, discountRate: 0, payments: [] };
+  const bill = check ? { ...check, lines: lines.length ? lines : check.lines } : { lines, offers: [], payments: [] };
 
   return (
     <aside className="till-context">

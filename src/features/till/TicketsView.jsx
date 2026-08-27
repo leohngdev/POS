@@ -6,6 +6,8 @@ import {
   checkLabel,
   checkTotal,
   money,
+  liveTables,
+  makeReceipt,
   moveTargets,
   openCheckForTable,
   pendingGuestTables,
@@ -15,6 +17,8 @@ import { usePos } from "./PosProvider";
 import { BillPanel, PayPad } from "./BillPanel";
 import { ClaimActions } from "./ClaimActions";
 import { TableOps } from "./TableOps";
+import { OfferPad } from "./OfferPad";
+import { printReceipt } from "./Receipt";
 
 function TicketCard({ title, detail, chip, selected, claimed, collapsed, paid, onSelect }) {
   return (
@@ -31,14 +35,14 @@ function TicketCard({ title, detail, chip, selected, claimed, collapsed, paid, o
 }
 
 export function TicketsView() {
-  const { state, venue, pay, accept, reject, move, voidSend, setDiscount } = usePos();
+  const { state, venue, pay, accept, reject, move, voidSend, addCheckOffer, dropCheckOffer } = usePos();
   const [selectedId, setSelectedId] = useState(null);
   const [waitTable, setWaitTable] = useState(null);
   const [notice, setNotice] = useState(null);
   const [moving, setMoving] = useState(false);
   const [tenderAmt, setTenderAmt] = useState("");
 
-  const waiting = pendingGuestTables(state, venue.tables);
+  const waiting = pendingGuestTables(state, liveTables(venue));
   const waitingSet = new Set(waiting);
   const cooking = state.checks.filter((c) => {
     if (checkFloorStatus(c, state.chits) !== "cooking") return false;
@@ -192,7 +196,7 @@ export function TicketsView() {
           />
           <TableOps
             showMove={Boolean(claimTableId && (selected?.channel === "dine-in" || waitTable) && selected?.status !== "paid")}
-            targets={claimTableId ? moveTargets(state, venue.tables, claimTableId) : []}
+            targets={claimTableId ? moveTargets(state, liveTables(venue), claimTableId) : []}
             moving={moving}
             onToggleMove={() => setMoving((m) => !m)}
             onMoveTo={(id) => {
@@ -240,28 +244,30 @@ export function TicketsView() {
           ) : null}
           {selected?.status === "open" ? (
             <>
-              <label className="till-name">
-                Discount %
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  value={Math.round((selected.discountRate ?? 0) * 1000) / 10}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (Number.isNaN(n)) return;
-                    setDiscount(selected.id, n / 100);
-                  }}
-                />
-              </label>
+              <OfferPad
+                venue={venue}
+                check={selected}
+                onAdd={(offer) => addCheckOffer(selected.id, offer)}
+                onRemove={(id) => dropCheckOffer(selected.id, id)}
+              />
               <PayPad
                 due={amountDue(selected, venue)}
                 amount={tenderAmt}
                 onAmount={setTenderAmt}
                 onPay={settle}
+                onPrint={() => printReceipt(makeReceipt(selected, venue))}
               />
             </>
+          ) : selected?.status === "paid" ? (
+            <button
+              type="button"
+              className="till-ghost till-inline"
+              onClick={() =>
+                printReceipt((state.receipts ?? []).find((r) => r.id === selected.id) ?? makeReceipt(selected, venue))
+              }
+            >
+              Print receipt
+            </button>
           ) : null}
         </BillPanel>
       ) : (

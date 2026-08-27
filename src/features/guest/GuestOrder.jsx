@@ -6,6 +6,7 @@ import {
   lastPaidCheckForTable,
   lineTotal,
   money,
+  liveTables,
   normalizeTableId,
   openCheckForTable,
   tableClaimStatus,
@@ -83,7 +84,7 @@ export function GuestOrder({ initialTable }) {
 
   useEffect(() => {
     if (!initialTable) return;
-    const id = normalizeTableId(initialTable, venue.tables);
+    const id = normalizeTableId(initialTable, liveTables(venue));
     if (!id) {
       setNotice("That table is not on this floor.");
       return;
@@ -102,7 +103,7 @@ export function GuestOrder({ initialTable }) {
   }, [tableId, state.guestClaims]);
 
   function submitTyped() {
-    const id = normalizeTableId(typed, venue.tables);
+    const id = normalizeTableId(typed, liveTables(venue));
     if (!id) {
       setNotice("That table is not on this floor.");
       return;
@@ -167,7 +168,7 @@ export function GuestOrder({ initialTable }) {
           </div>
           {notice ? <p className="till-error">{notice}</p> : null}
           <div className="till-map">
-            {venue.tables.map((id) => (
+            {liveTables(venue).map((id) => (
               <button key={id} type="button" className="till-table" onClick={() => pick(id)}>
                 {id}
               </button>

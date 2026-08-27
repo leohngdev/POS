@@ -16,6 +16,7 @@ export default function App() {
   return (
     <PosProvider>
       <Gate />
+      <div id="till-print-root" />
     </PosProvider>
   );
 }

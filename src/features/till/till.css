@@ -261,6 +261,8 @@
 
 .till-photo {
   height: 72px;
+  width: 100%;
+  object-fit: cover;
   margin-bottom: var(--space-2);
   border-radius: var(--radius-md);
   background: var(--color-bg);
@@ -273,9 +275,7 @@
 }
 
 .till-qty {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
+  flex: 0 0 auto;
   border: 1px solid var(--color-border);
   border-radius: 999px;
   background: var(--color-surface);
@@ -283,10 +283,16 @@
   cursor: pointer;
 }
 
+.till-dish-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
 .till-dish-note {
-  display: block;
-  width: calc(100% - 16px);
-  margin: 0 8px 8px;
+  flex: 1;
+  min-width: 0;
   font: inherit;
   font-size: 12px;
   color: var(--color-text);
@@ -463,7 +469,7 @@
 
 .till-menu-row {
   display: grid;
-  grid-template-columns: 1fr 88px auto;
+  grid-template-columns: 52px 1fr 88px auto;
   gap: var(--space-2);
   align-items: center;
 }
@@ -694,10 +700,157 @@
   width: 100%;
 }
 
+.till-floor {
+  position: relative;
+  background:
+    linear-gradient(to right, color-mix(in srgb, var(--color-border) 45%, transparent) 1px, transparent 1px) 0 0 / 16px 16px,
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-border) 45%, transparent) 1px, transparent 1px) 0 0 / 16px 16px,
+    var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-height: 280px;
+  margin-bottom: var(--space-4);
+}
+
+.till-floor.editing {
+  cursor: grab;
+}
+
+.till-floor-cell {
+  position: absolute;
+  display: grid;
+  gap: 4px;
+  width: 88px;
+}
+
+.till-floor-cell .till-claim-actions {
+  grid-template-columns: 1fr;
+}
+
+.till-floor-table {
+  width: 88px;
+  height: 64px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.till-floor-table.round {
+  border-radius: 999px;
+}
+
+.till-floor-table.on {
+  background: color-mix(in srgb, var(--color-primary) 28%, var(--color-surface));
+  border-color: var(--color-text);
+  font-weight: 700;
+}
+
+.till-floor-table.cooking { border-color: var(--color-text); }
+.till-floor-table.ready { border-style: dashed; }
+.till-floor-table.claimed {
+  animation: till-claim-pulse 1.4s ease-in-out infinite;
+  border-color: var(--color-text);
+}
+.till-floor-table.seated { border-color: var(--color-text); }
+
+.till-offers,
+.till-offer-add,
+.till-add-table {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: var(--space-2) 0;
+  align-items: center;
+}
+
+.till-offer-list {
+  list-style: none;
+  padding: 0;
+  max-width: 520px;
+}
+
+.till-offer-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.till-day-rates {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  max-width: 640px;
+}
+
+.till-setting select,
+.till-offer-add input,
+.till-offer-add select,
+.till-add-table input {
+  font: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.till-photo-pick {
+  width: 52px;
+  height: 40px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  cursor: pointer;
+  background: var(--color-bg);
+}
+
+.till-photo-pick img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.till-floor-list {
+  max-width: 520px;
+  margin: var(--space-4) 0;
+}
+
+.till-receipt p {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+#till-print-root {
+  display: none;
+}
+
+@media print {
+  body.till-printing * {
+    visibility: hidden;
+  }
+  body.till-printing #till-print-root,
+  body.till-printing #till-print-root * {
+    visibility: visible;
+  }
+  body.till-printing #till-print-root {
+    display: block;
+    position: absolute;
+    inset: 0;
+    padding: 24px;
+    font: 14px/1.4 sans-serif;
+  }
+}
+
 @media (max-width: 900px) {
   .till-shell,
   .till-shell-kitchen {
     grid-template-columns: 1fr;
   }
   .till-menu { grid-template-columns: 1fr 1fr; }
+  .till-day-rates { grid-template-columns: 1fr 1fr; }
 }

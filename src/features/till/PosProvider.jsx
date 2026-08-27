@@ -21,6 +21,14 @@ import {
   moveTable,
   voidLastSend,
   liveTables,
+  normalizeVenue,
+  addTable,
+  removeTable,
+  patchTable,
+  addOffer,
+  removeOffer,
+  applyCheckOffer,
+  removeCheckOffer,
 } from "../../services/pos";
 import { loadState, writeStore, STORAGE_KEY, toSnapshot } from "../../services/persist";
 import { VENUE } from "../../services/venue";
@@ -113,7 +121,27 @@ export function PosProvider({ children }) {
     };
   }, []);
 
-  const venue = useMemo(() => ({ ...VENUE, ...state.venue }), [state.venue]);
+  const venue = useMemo(() => normalizeVenue(state.venue), [state.venue]);
+
+  useEffect(() => {
+    const mins = Number(venue.lockMins) || 0;
+    if (!mins || !state.unlocked) return undefined;
+    let timer;
+    function arm() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        dispatch({ type: "replace", state: { ...fromStore(state), unlocked: false, pinError: null } });
+      }, mins * 60 * 1000);
+    }
+    arm();
+    window.addEventListener("pointerdown", arm);
+    window.addEventListener("keydown", arm);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pointerdown", arm);
+      window.removeEventListener("keydown", arm);
+    };
+  }, [state.unlocked, venue.lockMins]);
 
   async function withSync(apply) {
     mutatingRef.current = true;
@@ -164,7 +192,7 @@ export function PosProvider({ children }) {
       dispatch({ type: "replace", state: { ...fromStore(state), unlocked: false, pinError: null } });
     },
     sendOrder(payload) {
-      return withSync((latest) => send({ state: latest, venue: { ...VENUE, ...latest.venue }, now: Date.now(), ...payload }));
+      return withSync((latest) => send({ state: latest, venue: normalizeVenue(latest.venue), now: Date.now(), ...payload }));
     },
     pay(checkId, paidVia, amount) {
       return withSync((latest) => payCheck(latest, checkId, paidVia, amount));
@@ -187,17 +215,38 @@ export function PosProvider({ children }) {
     changeTableCount(count) {
       return withSync((latest) => setTableCount(latest, count));
     },
+    addFloorTable(id) {
+      return withSync((latest) => addTable(latest, id));
+    },
+    removeFloorTable(id) {
+      return withSync((latest) => removeTable(latest, id));
+    },
+    moveFloorTable(id, patch) {
+      return withSync((latest) => patchTable(latest, id, patch));
+    },
     addDish(item) {
       return withSync((latest) => addMenuItem(latest, item));
     },
     patchDish(itemId, patch) {
       return withSync((latest) => patchMenuItem(latest, itemId, patch));
     },
+    addVenueOffer(draft) {
+      return withSync((latest) => addOffer(latest, draft));
+    },
+    removeVenueOffer(id) {
+      return withSync((latest) => removeOffer(latest, id));
+    },
     setCovers(checkId, covers) {
       return withSync((latest) => setCheckCovers(latest, checkId, covers));
     },
     setDiscount(checkId, rate) {
       return withSync((latest) => setCheckDiscount(latest, checkId, rate));
+    },
+    addCheckOffer(checkId, offer) {
+      return withSync((latest) => applyCheckOffer(latest, checkId, offer));
+    },
+    dropCheckOffer(checkId, offerId) {
+      return withSync((latest) => removeCheckOffer(latest, checkId, offerId));
     },
     closeNight() {
       return withSync((latest) => endNight(latest));
