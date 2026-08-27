@@ -7,6 +7,7 @@ describe("parseGuestRoute", () => {
   });
 
   it("reads a QR table shortcut", () => {
+    expect(parseGuestRoute("#/order/1a")).toEqual({ isGuest: true, tableId: "1a" });
     expect(parseGuestRoute("#/order/04")).toEqual({ isGuest: true, tableId: "04" });
   });
 

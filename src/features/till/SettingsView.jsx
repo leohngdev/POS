@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DAYS, liveTables, money, nightReport } from "../../services/pos";
+import { DAYS, liveTables, liveZones, money, nightReport } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { FloorMap } from "./FloorMap";
 import { compressPhoto } from "./photo";
@@ -79,6 +79,10 @@ export function SettingsView() {
     addFloorTable,
     removeFloorTable,
     moveFloorTable,
+    renameFloorTable,
+    addFloorZone,
+    renameFloorZone,
+    removeFloorZone,
     addDish,
     patchDish,
     addVenueOffer,
@@ -91,6 +95,8 @@ export function SettingsView() {
   const [name, setName] = useState(venue.name);
   const [pin, setPin] = useState("");
   const [newTable, setNewTable] = useState("");
+  const [newZone, setNewZone] = useState("");
+  const [tableZone, setTableZone] = useState("");
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("12");
   const [offerName, setOfferName] = useState("");
@@ -178,6 +184,20 @@ export function SettingsView() {
               <input type="checkbox" checked={venue.askTakeawayEmail} onChange={(e) => setVenueTaxes({ askTakeawayEmail: e.target.checked })} />
               Ask for takeaway email
             </label>
+            <label className="till-setting">
+              <input type="checkbox" checked={venue.useBookings !== false} onChange={(e) => setVenueTaxes({ useBookings: e.target.checked })} />
+              Take bookings
+            </label>
+            <label className="till-setting">
+              Hold tables for
+              <select value={String(venue.bookingMins ?? 90)} onChange={(e) => setVenueTaxes({ bookingMins: Number(e.target.value) })}>
+                <option value="60">60 minutes</option>
+                <option value="90">90 minutes</option>
+                <option value="120">2 hours</option>
+                <option value="150">2.5 hours</option>
+              </select>
+              <span className="till-muted">How long a name owns a table in the book. Turn bookings off if this venue is walk-in only.</span>
+            </label>
           </section>
           <h2>Guest order</h2>
           <p className="till-muted">
@@ -205,16 +225,80 @@ export function SettingsView() {
 
       {tab === "floor" ? (
         <>
-          <p className="till-muted">Drag tables to match the room. Add 17 without adding 04. Remove a table if it is empty.</p>
+          <p className="till-muted">
+            Name tables the way they are printed — 1a, 1b, 4, 17. Skip numbers. Split the room into areas if upstairs is a different map.
+          </p>
+          {liveZones(venue).length > 1 ? (
+            <div className="till-strip">
+              {liveZones(venue).map((z) => (
+                <span key={z.id} className="till-zone-edit">
+                  <input
+                    defaultValue={z.name}
+                    aria-label={`${z.name} area name`}
+                    onBlur={(e) => {
+                      if (e.target.value !== z.name) renameFloorZone(z.id, e.target.value).then((r) => flash(r, "Saved area"));
+                    }}
+                  />
+                  <button type="button" className="till-ghost" onClick={() => removeFloorZone(z.id).then((r) => flash(r, "Removed area"))}>
+                    Remove
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <label className="till-name">
+            Add an area
+            <span className="till-add-table">
+              <input value={newZone} onChange={(e) => setNewZone(e.target.value)} placeholder="Upstairs" />
+              <button
+                type="button"
+                className="till-ghost"
+                onClick={() =>
+                  addFloorZone(newZone).then((r) => {
+                    flash(r, "Added area");
+                    if (r.ok) setNewZone("");
+                  })
+                }
+              >
+                Add
+              </button>
+            </span>
+          </label>
           <FloorMap tables={venue.tables} editor onMove={(id, patch) => moveFloorTable(id, patch)} />
           <div className="till-floor-list">
             {venue.tables.map((t) => (
-              <div key={t.id} className="till-menu-row">
-                <strong>Table {t.id}</strong>
+              <div key={t.id} className="till-menu-row till-table-edit">
+                <input
+                  defaultValue={t.id}
+                  aria-label={`Rename table ${t.id}`}
+                  onBlur={(e) => {
+                    if (e.target.value !== t.id) renameFloorTable(t.id, e.target.value).then((r) => flash(r, "Saved table"));
+                  }}
+                />
                 <select value={t.shape} onChange={(e) => moveFloorTable(t.id, { shape: e.target.value })}>
                   <option value="square">Square</option>
                   <option value="round">Round</option>
                 </select>
+                {liveZones(venue).length > 1 ? (
+                  <select value={t.zoneId} onChange={(e) => moveFloorTable(t.id, { zoneId: e.target.value })}>
+                    {liveZones(venue).map((z) => (
+                      <option key={z.id} value={z.id}>
+                        {z.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  defaultValue={t.seats}
+                  aria-label={`${t.id} seats`}
+                  onBlur={(e) => {
+                    const n = Number(e.target.value);
+                    if (n && n !== t.seats) moveFloorTable(t.id, { seats: n });
+                  }}
+                />
                 <button type="button" className="till-ghost" onClick={() => removeFloorTable(t.id).then((r) => flash(r, `Removed ${t.id}`))}>
                   Remove
                 </button>
@@ -222,15 +306,24 @@ export function SettingsView() {
             ))}
           </div>
           <label className="till-name">
-            Add table number
+            Add a table
             <span className="till-add-table">
-              <input value={newTable} onChange={(e) => setNewTable(e.target.value)} placeholder="05" inputMode="numeric" />
+              <input value={newTable} onChange={(e) => setNewTable(e.target.value)} placeholder="1a" />
+              {liveZones(venue).length > 1 ? (
+                <select value={tableZone || liveZones(venue)[0].id} onChange={(e) => setTableZone(e.target.value)}>
+                  {liveZones(venue).map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <button
                 type="button"
                 className="till-ghost"
                 onClick={() =>
-                  addFloorTable(newTable).then((r) => {
-                    flash(r, `Added ${r.ok ? r.state.venue.tables.at(-1).id : ""}`.trim());
+                  addFloorTable(newTable, tableZone || liveZones(venue)[0]?.id).then((r) => {
+                    flash(r, r.ok ? `Added ${r.state.venue.tables.at(-1).id}` : r.error);
                     if (r.ok) setNewTable("");
                   })
                 }

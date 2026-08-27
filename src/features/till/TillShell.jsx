@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DineInView } from "./DineInView";
+import { BookView } from "./BookView";
 import { TakeawayView } from "./TakeawayView";
 import { TicketsView } from "./TicketsView";
 import { KitchenView } from "./KitchenView";
@@ -10,6 +11,7 @@ import { hasPendingGuestClaims } from "../../services/pos";
 
 const NAV = [
   { id: "dine-in", label: "Dine in" },
+  { id: "book", label: "Book", book: true },
   { id: "takeaway", label: "Takeaway" },
   { id: "tickets", label: "Tickets" },
   { id: "kitchen", label: "Kitchen" },
@@ -20,19 +22,21 @@ const NAV = [
 export function TillShell() {
   const [nav, setNav] = useState("dine-in");
   const { lock, syncStatus, state, venue } = usePos();
-  const wide = nav === "kitchen" || nav === "settings";
   const guestWaiting = hasPendingGuestClaims(state);
+  const items = venue.useBookings === false ? NAV.filter((item) => item.id !== "book") : NAV;
+  const current = items.some((item) => item.id === nav) ? nav : "dine-in";
+  const wide = current === "kitchen" || current === "settings";
 
   return (
     <div className={`till-root till-shell${wide ? " till-shell-kitchen" : ""}`}>
       <aside className="till-nav">
         <div className="till-brand">{venue.name || "TILL"}</div>
         <p className="till-sync">{syncStatus === "live" ? "Venue live" : "This device only"}</p>
-        {NAV.map((item) => (
+        {items.map((item) => (
           <button
             key={item.id}
             type="button"
-            className={`${nav === item.id ? "till-nav-item on" : "till-nav-item"}${
+            className={`${current === item.id ? "till-nav-item on" : "till-nav-item"}${
               guestWaiting && (item.id === "dine-in" || item.id === "tickets") ? " alert" : ""
             }`}
             onClick={() => setNav(item.id)}
@@ -44,12 +48,13 @@ export function TillShell() {
           Lock
         </button>
       </aside>
-      {nav === "dine-in" ? <DineInView /> : null}
-      {nav === "takeaway" ? <TakeawayView /> : null}
-      {nav === "tickets" ? <TicketsView /> : null}
-      {nav === "kitchen" ? <KitchenView /> : null}
-      {nav === "history" ? <HistoryView /> : null}
-      {nav === "settings" ? <SettingsView /> : null}
+      {current === "dine-in" ? <DineInView /> : null}
+      {current === "book" ? <BookView /> : null}
+      {current === "takeaway" ? <TakeawayView /> : null}
+      {current === "tickets" ? <TicketsView /> : null}
+      {current === "kitchen" ? <KitchenView /> : null}
+      {current === "history" ? <HistoryView /> : null}
+      {current === "settings" ? <SettingsView /> : null}
     </div>
   );
 }

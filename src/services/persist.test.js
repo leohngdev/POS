@@ -123,6 +123,22 @@ describe("persist", () => {
     expect(loaded.venue.menu[0].name).toBe("Barley tea");
   });
 
+  it("round-trips named tables and tonight’s book", () => {
+    const custom = {
+      ...createInitialState(),
+      bookings: [{ id: "BK-1", name: "Sam", covers: 2, tableId: "1a", at: 9, status: "booked", phone: "", note: "", seatedAt: null }],
+      nextBooking: 2,
+      venue: {
+        ...createInitialState().venue,
+        tables: [{ id: "1a", x: 0, y: 0, seats: 4, shape: "square", zoneId: "floor" }],
+      },
+    };
+    const loaded = fromSnapshot(toSnapshot(custom), createInitialState());
+    expect(loaded.venue.tables[0].id).toBe("1a");
+    expect(loaded.bookings[0].name).toBe("Sam");
+    expect(loaded.nextBooking).toBe(2);
+  });
+
   it("keeps default menu when an old snapshot only stored tax flags", () => {
     const raw = {
       schema: 1,

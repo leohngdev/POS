@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 export function parseGuestRoute(hash) {
   const match = String(hash ?? "").match(/^#\/order(?:\/([^/?#]*))?\/?(?:\?.*)?$/);
   if (!match) return { isGuest: false, tableId: null };
-  return { isGuest: true, tableId: match[1] || null };
+  return { isGuest: true, tableId: match[1] ? decodeURIComponent(match[1]) : null };
 }
 
 export function useGuestRoute() {

@@ -734,6 +734,10 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.1;
+  overflow: hidden;
 }
 
 .till-floor-table.round {
@@ -753,6 +757,118 @@
   border-color: var(--color-text);
 }
 .till-floor-table.seated { border-color: var(--color-text); }
+.till-floor-table.held {
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+}
+
+.till-claim-tag.till-book-tag {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.till-slots {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: var(--space-3);
+}
+
+.till-slot {
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.till-slot.on {
+  border-color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 22%, var(--color-surface));
+  font-weight: 700;
+}
+
+.till-book-pane {
+  padding: var(--space-6) var(--space-4);
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 100vh;
+}
+
+.till-book-pane h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.till-diary {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-3) 0 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.till-diary-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.till-diary-card div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.till-diary-card span,
+.till-diary-card em {
+  color: var(--color-muted);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.till-diary-card.seated {
+  border-color: var(--color-text);
+}
+
+.till-diary-card.no-show,
+.till-diary-card.cancelled {
+  opacity: 0.55;
+}
+
+.till-diary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.till-table-edit {
+  grid-template-columns: 72px 88px minmax(72px, 1fr) 64px auto;
+}
+
+.till-zone-edit {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.till-zone-edit input {
+  font: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  width: 140px;
+}
 
 .till-offers,
 .till-offer-add,

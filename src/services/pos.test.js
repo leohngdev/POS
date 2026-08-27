@@ -39,6 +39,10 @@ import {
   applyCheckOffer,
   addOffer,
   liveTables,
+  renameTable,
+  addZone,
+  addBooking,
+  seatBooking,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -203,6 +207,8 @@ describe("Guest claim", () => {
     expect(normalizeTableId("004", VENUE.tables)).toBe("04");
     expect(normalizeTableId("99", VENUE.tables)).toBe(null);
     expect(normalizeTableId("nope", VENUE.tables)).toBe(null);
+    expect(normalizeTableId("1a", ["1a", "1b"])).toBe("1a");
+    expect(normalizeTableId("1A", ["1a", "1b"])).toBe("1a");
   });
 
   it("claims pending, accepts to seat, and keeps a refresh seated", () => {
@@ -707,5 +713,86 @@ describe("Line notes, discount, tender, venue config", () => {
     const paid = payCheck(sent.state, "CHK-1", "cash");
     expect(paid.state.receipts[0].id).toBe("CHK-1");
     expect(paid.state.receipts[0].total).toBe(24);
+  });
+});
+
+describe("Table names", () => {
+  it("keeps 1a as 1a and still maps 4 to 04 on the default floor", () => {
+    expect(normalizeTableId("4", VENUE.tables)).toBe("04");
+    expect(normalizeTableId("1a", VENUE.tables)).toBe(null);
+    const added = addTable(createInitialState(), "1a");
+    expect(added.ok).toBe(true);
+    expect(liveTables(added.state.venue)).toContain("1a");
+    expect(normalizeTableId("1A", liveTables(added.state.venue))).toBe("1a");
+    expect(normalizeTableId("1", liveTables(added.state.venue))).toBe("01");
+    let state = renameTable(createInitialState(), "01", "1a").state;
+    state = renameTable(state, "02", "1b").state;
+    expect(normalizeTableId("1", liveTables(state.venue))).toBe(null);
+    expect(normalizeTableId("1a", liveTables(state.venue))).toBe("1a");
+    expect(normalizeTableId("1b", liveTables(state.venue))).toBe("1b");
+  });
+
+  it("will not add 4 when 04 already exists", () => {
+    const added = addTable(createInitialState(), "4");
+    expect(added.ok).toBe(false);
+  });
+
+  it("renames 04 to 1a and takes the open check with it", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const renamed = renameTable(sent.state, "04", "1a");
+    expect(renamed.ok).toBe(true);
+    expect(openCheckForTable(renamed.state.checks, "1a")).toBeTruthy();
+    expect(openCheckForTable(renamed.state.checks, "04")).toBeNull();
+    expect(liveTables(renamed.state.venue)).not.toContain("04");
+  });
+
+  it("puts a table in Upstairs without touching downstairs ids", () => {
+    const zoned = addZone(createInitialState(), "Upstairs");
+    expect(zoned.ok).toBe(true);
+    const added = addTable(zoned.state, "10", zoned.state.venue.zones[1].id);
+    expect(added.state.venue.tables.find((t) => t.id === "10").zoneId).toBe(zoned.state.venue.zones[1].id);
+    expect(liveTables(added.state.venue).slice(0, 8)).toEqual(VENUE.tables);
+  });
+});
+
+describe("Book", () => {
+  const six = Date.parse("2026-08-27T18:00:00");
+  const seven = Date.parse("2026-08-27T19:00:00");
+
+  it("holds a table for a name and refuses a clash inside the hold window", () => {
+    const first = addBooking(createInitialState(), { name: "Sam", covers: 2, tableId: "04", at: six });
+    expect(first.ok).toBe(true);
+    const clash = addBooking(first.state, { name: "Lee", covers: 2, tableId: "04", at: six + 30 * 60 * 1000 });
+    expect(clash.ok).toBe(false);
+    const later = addBooking(first.state, { name: "Lee", covers: 2, tableId: "04", at: seven + 60 * 60 * 1000 });
+    expect(later.ok).toBe(true);
+  });
+
+  it("seats a booking onto the floor with guests already filled", () => {
+    const booked = addBooking(createInitialState(), { name: "Sam", covers: 4, tableId: "1a", at: six });
+    expect(booked.ok).toBe(false);
+    const withTable = addTable(createInitialState(), "1a");
+    const named = addBooking(withTable.state, { name: "Sam", covers: 4, tableId: "1a", at: six });
+    const seated = seatBooking(named.state, named.state.bookings[0].id, six);
+    expect(tableClaimStatus(seated.state, "1a")).toBe("accepted");
+    expect(seated.state.guestClaims["1a"].covers).toBe(4);
+    expect(seated.state.guestClaims["1a"].name).toBe("Sam");
+    expect(seated.state.bookings[0].status).toBe("seated");
+  });
+
+  it("keeps tomorrow’s book after end of night", () => {
+    const tomorrow = Date.parse("2026-08-28T18:00:00");
+    const booked = addBooking(createInitialState(), { name: "Sam", covers: 2, tableId: "04", at: tomorrow });
+    const closed = endNight(booked.state, six);
+    expect(closed.state.bookings).toHaveLength(1);
+    expect(closed.state.bookings[0].name).toBe("Sam");
+    expect(closed.state.guestClaims).toEqual({});
   });
 });

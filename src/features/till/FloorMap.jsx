@@ -1,11 +1,21 @@
-import { TABLE_GAP, TABLE_H, TABLE_W, tableFloorStatus, tableClaimStatus } from "../../services/pos";
+import {
+  TABLE_GAP,
+  TABLE_H,
+  TABLE_W,
+  bookingAtTable,
+  formatClock,
+  nextBookingForTable,
+  tableFloorStatus,
+  tableClaimStatus,
+} from "../../services/pos";
 
-function tableClass(selected, claim, floor, shape) {
+function tableClass(selected, claim, floor, shape, held) {
   const parts = ["till-floor-table", shape === "round" ? "round" : "square"];
   if (selected) parts.push("on");
   if (claim === "pending") parts.push("claimed");
   if (claim === "accepted") parts.push("seated");
   if (floor === "cooking" || floor === "ready") parts.push(floor);
+  if (held) parts.push("held");
   return parts.join(" ");
 }
 
@@ -17,10 +27,13 @@ export function FloorMap({
   editor,
   onMove,
   childrenFor,
+  at,
+  preview,
 }) {
   const records = tables ?? [];
   const width = Math.max(420, ...records.map((t) => (t.x ?? 0) + TABLE_W + TABLE_GAP));
   const height = Math.max(280, ...records.map((t) => (t.y ?? 0) + TABLE_H + TABLE_GAP));
+  const when = at ?? Date.now();
 
   function startDrag(event, table) {
     if (!editor || !onMove) return;
@@ -58,10 +71,12 @@ export function FloorMap({
   return (
     <div className={`till-floor${editor ? " editing" : ""}`} style={{ width, minHeight: height }}>
       {records.map((table) => {
-        const claim = state ? tableClaimStatus(state, table.id) : null;
-        const floor = state ? tableFloorStatus(state, table.id) : "empty";
+        const claim = !preview && state ? tableClaimStatus(state, table.id) : null;
+        const floor = !preview && state ? tableFloorStatus(state, table.id) : "empty";
+        const hold = state ? (preview ? bookingAtTable(state, table.id, when) : nextBookingForTable(state, table.id, Date.now())) : null;
         const floorTag = floor === "cooking" ? "Cooking" : floor === "ready" ? "To pay" : null;
         const guestTag = claim === "pending" ? "Guest" : claim === "accepted" ? "Seated" : null;
+        const bookTag = hold ? `${hold.name} · ${formatClock(hold.at)}` : null;
         return (
           <div
             key={table.id}
@@ -70,13 +85,14 @@ export function FloorMap({
           >
             <button
               type="button"
-              className={tableClass(selectedId === table.id, claim, floor, table.shape)}
+              className={tableClass(selectedId === table.id, claim, floor, table.shape, Boolean(hold) && !claim)}
               onClick={() => onSelect?.(table.id)}
               onPointerDown={editor ? (e) => startDrag(e, table) : undefined}
             >
               {table.id}
               {guestTag ? <span className="till-claim-tag">{guestTag}</span> : null}
               {floorTag && claim !== "pending" ? <span className="till-claim-tag">{floorTag}</span> : null}
+              {bookTag && !guestTag ? <span className="till-claim-tag till-book-tag">{bookTag}</span> : null}
             </button>
             {childrenFor ? childrenFor(table) : null}
           </div>

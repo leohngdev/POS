@@ -7,6 +7,8 @@ import {
   lineTotal,
   money,
   liveTables,
+  liveZones,
+  tablesInZone,
   normalizeTableId,
   openCheckForTable,
   tableClaimStatus,
@@ -45,6 +47,7 @@ export function GuestOrder({ initialTable }) {
   const { state, venue, sendOrder, claim, release, pay } = usePos();
   const [tableId, setTableId] = useState(null);
   const [typed, setTyped] = useState("");
+  const [zoneId, setZoneId] = useState("all");
   const [draft, setDraft] = useState({});
   const [notes, setNotes] = useState({});
   const [notice, setNotice] = useState(null);
@@ -153,24 +156,42 @@ export function GuestOrder({ initialTable }) {
       {!tableId ? (
         <>
           <h1>Which table?</h1>
-          <p className="till-muted">Type the number on the table, or tap it. No staff PIN.</p>
+          <p className="till-muted">Type what’s printed on the table — 4, 1a, 17 — or tap it. No staff PIN.</p>
           <div className="guest-type">
             <input
-              inputMode="numeric"
-              placeholder="04"
+              placeholder="1a"
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
-              aria-label="Table number"
+              aria-label="Table"
+              autoCapitalize="off"
+              autoCorrect="off"
             />
             <button type="button" className="till-primary" onClick={submitTyped}>
               Claim
             </button>
           </div>
           {notice ? <p className="till-error">{notice}</p> : null}
+          {liveZones(venue).length > 1 ? (
+            <div className="till-strip">
+              <button type="button" className={zoneId === "all" ? "till-table till-table-sm on" : "till-table till-table-sm"} onClick={() => setZoneId("all")}>
+                All
+              </button>
+              {liveZones(venue).map((z) => (
+                <button
+                  key={z.id}
+                  type="button"
+                  className={zoneId === z.id ? "till-table till-table-sm on" : "till-table till-table-sm"}
+                  onClick={() => setZoneId(z.id)}
+                >
+                  {z.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="till-map">
-            {liveTables(venue).map((id) => (
-              <button key={id} type="button" className="till-table" onClick={() => pick(id)}>
-                {id}
+            {tablesInZone(venue, zoneId).map((t) => (
+              <button key={t.id} type="button" className="till-table" onClick={() => pick(t.id)}>
+                {t.id}
               </button>
             ))}
           </div>

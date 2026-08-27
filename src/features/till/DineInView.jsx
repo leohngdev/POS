@@ -4,12 +4,13 @@ import {
   compactLines,
   canVoidLastSend,
   liveTables,
+  liveZones,
   makeReceipt,
   moveTargets,
   openCheckForTable,
   tableClaimStatus,
   tableFloorStatus,
-  tableRecords,
+  tablesInZone,
 } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { MenuGrid } from "./MenuGrid";
@@ -56,8 +57,10 @@ export function DineInView() {
   const [moving, setMoving] = useState(false);
   const [draftGuests, setDraftGuests] = useState(0);
   const [tenderAmt, setTenderAmt] = useState("");
+  const [zoneId, setZoneId] = useState("all");
   const ids = liveTables(venue);
-  const records = tableRecords(venue);
+  const zones = liveZones(venue);
+  const records = tablesInZone(venue, zoneId);
 
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
   const ordering = Boolean(tableId);
@@ -75,7 +78,8 @@ export function DineInView() {
     setMoving(false);
     setTenderAmt("");
     const check = openCheckForTable(state.checks, id);
-    setDraftGuests(check?.covers ?? 0);
+    const claim = state.guestClaims?.[id];
+    setDraftGuests(check?.covers ?? claim?.covers ?? 0);
   }
 
   function backToFloor() {
@@ -139,6 +143,23 @@ export function DineInView() {
         {!ordering ? (
           <>
             <h1>Floor</h1>
+            {zones.length > 1 ? (
+              <div className="till-strip">
+                <button type="button" className={zoneId === "all" ? "till-table till-table-sm on" : "till-table till-table-sm"} onClick={() => setZoneId("all")}>
+                  All
+                </button>
+                {zones.map((z) => (
+                  <button
+                    key={z.id}
+                    type="button"
+                    className={zoneId === z.id ? "till-table till-table-sm on" : "till-table till-table-sm"}
+                    onClick={() => setZoneId(z.id)}
+                  >
+                    {z.name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <FloorMap
               tables={records}
               state={state}

@@ -96,7 +96,58 @@ export function padTableId(raw) {
   return n > 99 ? String(n) : String(n).padStart(2, "0");
 }
 
-export function layoutTable(id, index) {
+/** What staff printed on the table: 1a, 1b, 4, 17, Bar-3. Not a padded spreadsheet id. */
+export function tableLabel(raw) {
+  const s = String(raw ?? "")
+    .trim()
+    .replace(/\s+/g, "");
+  if (!s || s.length > 12) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,11}$/.test(s)) return null;
+  return s;
+}
+
+export function tableKey(id) {
+  return String(id ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function numericTableKey(id) {
+  const s = tableKey(id);
+  if (!/^\d+$/.test(s)) return null;
+  return String(Number(s));
+}
+
+export function sameTable(a, b) {
+  if (!a || !b) return false;
+  if (tableKey(a) === tableKey(b)) return true;
+  const na = numericTableKey(a);
+  const nb = numericTableKey(b);
+  return na != null && na === nb;
+}
+
+export function tableIds(tables) {
+  if (!Array.isArray(tables)) return [];
+  return tables.map((t) => (typeof t === "string" ? t : t?.id)).filter(Boolean);
+}
+
+function slugId(name, existing) {
+  const slug =
+    String(name)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 24) || "id";
+  if (!existing.includes(slug)) return slug;
+  let n = 2;
+  while (existing.includes(`${slug}-${n}`)) n += 1;
+  return `${slug}-${n}`;
+}
+
+export const DEFAULT_ZONE = { id: "floor", name: "Floor" };
+export const BOOKING_MINS = [60, 90, 120, 150];
+
+export function layoutTable(id, index, zoneId = DEFAULT_ZONE.id) {
   const col = index % 4;
   const row = Math.floor(index / 4);
   return {
@@ -105,19 +156,31 @@ export function layoutTable(id, index) {
     y: row * (TABLE_H + TABLE_GAP),
     seats: 4,
     shape: "square",
+    zoneId,
   };
 }
 
-export function normalizeTable(raw, index = 0) {
-  if (typeof raw === "string") return layoutTable(raw, index);
-  if (!raw || typeof raw !== "object") return layoutTable(padTableId(index + 1) ?? "01", index);
-  const id = padTableId(raw.id) ?? padTableId(raw.label) ?? layoutTable("01", index).id;
+export function normalizeZone(raw, index = 0, taken = []) {
+  const name = String(raw?.name ?? "").trim() || (index === 0 ? DEFAULT_ZONE.name : `Area ${index + 1}`);
+  const id = String(raw?.id || slugId(name, taken)).slice(0, 24);
+  return { id, name };
+}
+
+export function normalizeTable(raw, index = 0, zoneId = DEFAULT_ZONE.id) {
+  if (typeof raw === "string") {
+    const id = tableLabel(raw) ?? padTableId(raw) ?? `T${index + 1}`;
+    return layoutTable(id, index, zoneId);
+  }
+  if (!raw || typeof raw !== "object") return layoutTable(padTableId(index + 1) ?? "01", index, zoneId);
+  const id = tableLabel(raw.id) ?? tableLabel(raw.label) ?? padTableId(raw.id) ?? `T${index + 1}`;
+  const zid = String(raw.zoneId || zoneId || DEFAULT_ZONE.id);
   return {
     id,
     x: Number.isFinite(Number(raw.x)) ? Number(raw.x) : layoutTable(id, index).x,
     y: Number.isFinite(Number(raw.y)) ? Number(raw.y) : layoutTable(id, index).y,
     seats: Math.min(20, Math.max(1, Math.floor(Number(raw.seats) || 4))),
     shape: raw.shape === "round" ? "round" : "square",
+    zoneId: zid,
   };
 }
 
@@ -127,9 +190,9 @@ export function clampCovers(n) {
   return Math.min(99, Math.max(0, v));
 }
 
-export function makeTables(count) {
+export function makeTables(count, zoneId = DEFAULT_ZONE.id) {
   const n = Math.min(40, Math.max(1, Math.floor(Number(count) || 1)));
-  return Array.from({ length: n }, (_, i) => layoutTable(String(i + 1).padStart(2, "0"), i));
+  return Array.from({ length: n }, (_, i) => layoutTable(String(i + 1).padStart(2, "0"), i, zoneId));
 }
 
 function normalizeOffer(raw) {
@@ -148,10 +211,12 @@ function normalizeOffer(raw) {
 }
 
 export function defaultVenue() {
-  const tables = VENUE.tables.map((id, i) => layoutTable(id, i));
+  const zones = [DEFAULT_ZONE];
+  const tables = VENUE.tables.map((id, i) => layoutTable(id, i, DEFAULT_ZONE.id));
   return {
     name: VENUE.name,
     pin: VENUE.pin,
+    zones,
     tables,
     menu: VENUE.menu.map((i) => ({
       id: i.id,
@@ -169,6 +234,8 @@ export function defaultVenue() {
     askTakeawayPhone: false,
     askTakeawayEmail: false,
     lockMins: 0,
+    useBookings: true,
+    bookingMins: 90,
   };
 }
 
@@ -186,15 +253,28 @@ export function normalizeVenue(raw) {
           photo: typeof i.photo === "string" && i.photo.startsWith("data:") ? i.photo : null,
         }))
     : null;
-  const tables = Array.isArray(raw.tables) && raw.tables.length
-    ? raw.tables.map((t, i) => normalizeTable(t, i))
-    : base.tables;
+  const zoneTaken = [];
+  const zones = (Array.isArray(raw.zones) && raw.zones.length ? raw.zones : base.zones)
+    .map((z, i) => {
+      const zone = normalizeZone(z, i, zoneTaken);
+      zoneTaken.push(zone.id);
+      return zone;
+    })
+    .filter((z, i, all) => all.findIndex((x) => x.id === z.id) === i)
+    .slice(0, 8);
+  const fallbackZone = zones[0]?.id ?? DEFAULT_ZONE.id;
+  const tables =
+    Array.isArray(raw.tables) && raw.tables.length
+      ? raw.tables.map((t, i) => normalizeTable(t, i, fallbackZone))
+      : base.tables;
   const seen = new Set();
   const unique = [];
   for (const t of tables) {
-    if (seen.has(t.id)) continue;
-    seen.add(t.id);
-    unique.push(t);
+    const key = tableKey(t.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const zoneId = zones.some((z) => z.id === t.zoneId) ? t.zoneId : fallbackZone;
+    unique.push({ ...t, zoneId });
   }
   const offers = Array.isArray(raw.offers) ? raw.offers.map(normalizeOffer).filter(Boolean) : base.offers;
   const surchargeByDay =
@@ -206,6 +286,7 @@ export function normalizeVenue(raw) {
   return {
     name: String(raw.name ?? base.name).trim() || base.name,
     pin: String(raw.pin ?? base.pin) || base.pin,
+    zones: zones.length ? zones : base.zones,
     tables: unique.length ? unique : base.tables,
     menu: menu && menu.length ? menu : base.menu,
     gstEnabled: Boolean(raw.gstEnabled ?? base.gstEnabled),
@@ -217,6 +298,8 @@ export function normalizeVenue(raw) {
     askTakeawayPhone: Boolean(raw.askTakeawayPhone),
     askTakeawayEmail: Boolean(raw.askTakeawayEmail),
     lockMins: [0, 5, 10, 30].includes(Number(raw.lockMins)) ? Number(raw.lockMins) : 0,
+    useBookings: raw.useBookings === undefined ? true : Boolean(raw.useBookings),
+    bookingMins: BOOKING_MINS.includes(Number(raw.bookingMins)) ? Number(raw.bookingMins) : 90,
   };
 }
 
@@ -232,6 +315,16 @@ export function tableRecords(venue) {
   return normalizeVenue(venue).tables;
 }
 
+export function liveZones(venue) {
+  return normalizeVenue(venue).zones;
+}
+
+export function tablesInZone(venue, zoneId) {
+  const records = tableRecords(venue);
+  if (!zoneId || zoneId === "all") return records;
+  return records.filter((t) => t.zoneId === zoneId);
+}
+
 export function orderableMenu(menu) {
   return (menu ?? []).filter((item) => !item.soldOut);
 }
@@ -243,9 +336,11 @@ export function createInitialState() {
     checks: [],
     chits: [],
     receipts: [],
+    bookings: [],
     nextCheck: 1,
     nextChit: 1,
     nextTakeaway: 1,
+    nextBooking: 1,
     lastBumpedChitId: null,
     guestClaims: {},
     venue: defaultVenue(),
@@ -269,6 +364,8 @@ export function updateVenueTaxes(state, patch) {
   if (patch.askTakeawayPhone !== undefined) next.askTakeawayPhone = patch.askTakeawayPhone;
   if (patch.askTakeawayEmail !== undefined) next.askTakeawayEmail = patch.askTakeawayEmail;
   if (patch.lockMins !== undefined) next.lockMins = patch.lockMins;
+  if (patch.useBookings !== undefined) next.useBookings = patch.useBookings;
+  if (patch.bookingMins !== undefined) next.bookingMins = patch.bookingMins;
   return updateVenue(state, next);
 }
 
@@ -299,15 +396,17 @@ export function setTableCount(state, count) {
   return { ok: true, error: null, state: updateVenue(state, { tables }) };
 }
 
-export function addTable(state, rawId) {
-  const id = padTableId(rawId);
-  if (!id) return { ok: false, error: "Give the table a number.", state };
+export function addTable(state, rawId, zoneId) {
+  const id = tableLabel(rawId);
+  if (!id) return { ok: false, error: "Name the table the way it is on the floor — 1a, 4, 17.", state };
   const venue = normalizeVenue(state.venue);
-  if (venue.tables.some((t) => t.id === id)) {
-    return { ok: false, error: `Table ${id} is already on the floor.`, state };
+  const clash = venue.tables.find((t) => sameTable(t.id, id));
+  if (clash) {
+    return { ok: false, error: `Table ${clash.id} is already on the floor.`, state };
   }
   if (venue.tables.length >= 40) return { ok: false, error: "Forty tables is the cap.", state };
-  const tables = [...venue.tables, layoutTable(id, venue.tables.length)];
+  const zid = venue.zones.some((z) => z.id === zoneId) ? zoneId : venue.zones[0].id;
+  const tables = [...venue.tables, layoutTable(id, venue.tables.length, zid)];
   return { ok: true, error: null, state: updateVenue(state, { tables }) };
 }
 
@@ -332,8 +431,70 @@ export function patchTable(state, tableId, patch) {
   if (!venue.tables.some((t) => t.id === tableId)) {
     return { ok: false, error: "No such table.", state };
   }
-  const tables = venue.tables.map((t) => (t.id === tableId ? normalizeTable({ ...t, ...patch, id: t.id }) : t));
+  const nextPatch = { ...patch };
+  if (nextPatch.zoneId && !venue.zones.some((z) => z.id === nextPatch.zoneId)) {
+    return { ok: false, error: "No such area.", state };
+  }
+  const tables = venue.tables.map((t) =>
+    t.id === tableId ? normalizeTable({ ...t, ...nextPatch, id: t.id }, 0, t.zoneId) : t
+  );
   return { ok: true, error: null, state: updateVenue(state, { tables }) };
+}
+
+export function renameTable(state, fromId, rawTo) {
+  const toId = tableLabel(rawTo);
+  if (!toId) return { ok: false, error: "Name the table the way it is on the floor — 1a, 4, 17.", state };
+  const venue = normalizeVenue(state.venue);
+  if (!venue.tables.some((t) => t.id === fromId)) {
+    return { ok: false, error: "No such table.", state };
+  }
+  const clash = venue.tables.find((t) => t.id !== fromId && sameTable(t.id, toId));
+  if (clash) return { ok: false, error: `Table ${clash.id} is already on the floor.`, state };
+  if (fromId === toId) return { ok: true, error: null, state };
+  const tables = venue.tables.map((t) => (t.id === fromId ? { ...t, id: toId } : t));
+  const remap = (id) => (id === fromId ? toId : id);
+  const checks = state.checks.map((c) => (c.tableId === fromId ? { ...c, tableId: toId } : c));
+  const guestClaims = {};
+  for (const [id, claim] of Object.entries(state.guestClaims ?? {})) {
+    guestClaims[remap(id)] = claim;
+  }
+  const bookings = (state.bookings ?? []).map((b) => (b.tableId === fromId ? { ...b, tableId: toId } : b));
+  return {
+    ok: true,
+    error: null,
+    state: updateVenue({ ...state, checks, guestClaims, bookings }, { tables }),
+  };
+}
+
+export function addZone(state, name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return { ok: false, error: "Name the area — Upstairs, Patio, Bar.", state };
+  const venue = normalizeVenue(state.venue);
+  if (venue.zones.length >= 8) return { ok: false, error: "Eight areas is the cap.", state };
+  if (venue.zones.some((z) => tableKey(z.name) === tableKey(trimmed))) {
+    return { ok: false, error: "That area is already on the floor.", state };
+  }
+  const zone = normalizeZone({ name: trimmed }, venue.zones.length, venue.zones.map((z) => z.id));
+  return { ok: true, error: null, state: updateVenue(state, { zones: [...venue.zones, zone] }) };
+}
+
+export function renameZone(state, zoneId, name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return { ok: false, error: "Name the area.", state };
+  const venue = normalizeVenue(state.venue);
+  if (!venue.zones.some((z) => z.id === zoneId)) return { ok: false, error: "No such area.", state };
+  const zones = venue.zones.map((z) => (z.id === zoneId ? { ...z, name: trimmed } : z));
+  return { ok: true, error: null, state: updateVenue(state, { zones }) };
+}
+
+export function removeZone(state, zoneId) {
+  const venue = normalizeVenue(state.venue);
+  if (venue.zones.length <= 1) return { ok: false, error: "Keep at least one area.", state };
+  if (!venue.zones.some((z) => z.id === zoneId)) return { ok: false, error: "No such area.", state };
+  const zones = venue.zones.filter((z) => z.id !== zoneId);
+  const fallback = zones[0].id;
+  const tables = venue.tables.map((t) => (t.zoneId === zoneId ? { ...t, zoneId: fallback } : t));
+  return { ok: true, error: null, state: updateVenue(state, { zones, tables }) };
 }
 
 export function addOffer(state, draft) {
@@ -362,16 +523,10 @@ export function patchOffer(state, offerId, patch) {
 }
 
 function menuIdFromName(name, menu) {
-  const slug =
-    String(name)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 24) || "item";
-  if (!menu.some((i) => i.id === slug)) return slug;
-  let n = 2;
-  while (menu.some((i) => i.id === `${slug}-${n}`)) n += 1;
-  return `${slug}-${n}`;
+  return slugId(
+    name,
+    menu.map((i) => i.id)
+  );
 }
 
 export function addMenuItem(state, { name, unitPrice }) {
@@ -546,13 +701,18 @@ function sendNewCheck({
     channel,
     tableId,
     queueNumber,
-    guestName,
+    guestName:
+      channel === "takeaway"
+        ? guestName
+        : guestName?.trim()
+          ? guestName.trim()
+          : state.guestClaims?.[tableId]?.name ?? null,
     guestPhone: guestPhone?.trim() ? guestPhone.trim() : null,
     guestEmail: guestEmail?.trim() ? guestEmail.trim() : null,
     status: "open",
     lines: lines.map((l) => ({ ...l })),
     paidVia: null,
-    covers: channel === "dine-in" ? clampCovers(covers) : 0,
+    covers: channel === "dine-in" ? clampCovers(covers ?? state.guestClaims?.[tableId]?.covers) : 0,
     discountRate: clampRate(Number(discountRate) || 0, 0),
     offers: Array.isArray(offers) ? offers.map(normalizeOffer).filter(Boolean) : [],
     payments: [],
@@ -802,12 +962,12 @@ export function nightReport(state) {
   };
 }
 
-export function endNight(state) {
+export function endNight(state, now = Date.now()) {
   const venue = normalizeVenue(state.venue);
   let receipts = [...(state.receipts ?? [])];
   for (const check of state.checks.filter((c) => c.status === "paid")) {
     if (!receipts.some((r) => r.id === check.id)) {
-      receipts = [makeReceipt(check, venue, check.closedAt ?? Date.now()), ...receipts];
+      receipts = [makeReceipt(check, venue, check.closedAt ?? now), ...receipts];
     }
   }
   const keep = state.checks.filter((c) => c.status !== "paid");
@@ -821,10 +981,259 @@ export function endNight(state) {
     state: {
       ...state,
       checks: keep,
-      chits: state.chits.filter((c) => keepIds.has(c.checkId)),
+      chits: state.chits.filter((c) => c.checkId && keepIds.has(c.checkId)),
       receipts: receipts.slice(0, 200),
       lastBumpedChitId,
       guestClaims: {},
+      bookings: pruneBookings(state.bookings ?? [], now),
+    },
+  };
+}
+
+export function holdMs(venue) {
+  const mins = Number(normalizeVenue(venue).bookingMins);
+  return (BOOKING_MINS.includes(mins) ? mins : 90) * 60 * 1000;
+}
+
+export function startOfLocalDay(at) {
+  const d = new Date(at);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export function formatClock(at) {
+  const d = new Date(at);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const h12 = ((h + 11) % 12) + 1;
+  const ap = h < 12 ? "am" : "pm";
+  return m === "00" ? `${h12}${ap}` : `${h12}:${m}${ap}`;
+}
+
+export function daySlots(at, fromHour = 11, toHour = 22, stepMin = 15) {
+  const start = startOfLocalDay(at);
+  const slots = [];
+  for (let m = fromHour * 60; m <= toHour * 60; m += stepMin) {
+    slots.push(start + m * 60 * 1000);
+  }
+  return slots;
+}
+
+export function defaultBookSlot(now) {
+  const start = startOfLocalDay(now);
+  const minutes = new Date(now).getHours() * 60 + new Date(now).getMinutes();
+  const rounded = Math.ceil((minutes + 1) / 15) * 15;
+  if (rounded < 11 * 60) return start + 18 * 60 * 60 * 1000;
+  if (rounded > 22 * 60) return start + 24 * 60 * 60 * 1000 + 18 * 60 * 60 * 1000;
+  return start + rounded * 60 * 1000;
+}
+
+function isOpenBooking(b) {
+  return b && b.status === "booked";
+}
+
+export function bookingsOverlap(a, b, windowMs) {
+  if (!isOpenBooking(a) || !isOpenBooking(b)) return false;
+  if (!a.tableId || !b.tableId || a.tableId !== b.tableId) return false;
+  return Math.abs(Number(a.at) - Number(b.at)) < windowMs;
+}
+
+export function heldOnTable(state, tableId, at, exceptId) {
+  const venue = normalizeVenue(state.venue);
+  const windowMs = holdMs(venue);
+  return (state.bookings ?? []).find(
+    (b) => b.id !== exceptId && isOpenBooking(b) && b.tableId === tableId && Math.abs(b.at - at) < windowMs
+  ) ?? null;
+}
+
+export function bookingAtTable(state, tableId, at) {
+  const venue = normalizeVenue(state.venue);
+  const windowMs = holdMs(venue);
+  const grace = 15 * 60 * 1000;
+  return (
+    (state.bookings ?? []).find(
+      (b) =>
+        isOpenBooking(b) &&
+        b.tableId === tableId &&
+        at >= b.at - grace &&
+        at < b.at + windowMs
+    ) ?? null
+  );
+}
+
+export function nextBookingForTable(state, tableId, now) {
+  const start = startOfLocalDay(now);
+  const end = start + 24 * 60 * 60 * 1000;
+  return (
+    (state.bookings ?? [])
+      .filter(
+        (b) =>
+          isOpenBooking(b) &&
+          b.tableId === tableId &&
+          b.at >= now - 30 * 60 * 1000 &&
+          b.at < end
+      )
+      .sort((a, b) => a.at - b.at)[0] ?? null
+  );
+}
+
+export function tonightBookings(bookings, at) {
+  const start = startOfLocalDay(at);
+  const end = start + 24 * 60 * 60 * 1000;
+  return (bookings ?? [])
+    .filter((b) => b.at >= start && b.at < end && b.status !== "cancelled")
+    .slice()
+    .sort((a, b) => a.at - b.at || String(a.name).localeCompare(String(b.name)));
+}
+
+function pruneBookings(bookings, now) {
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const tomorrow = startOfLocalDay(now) + 24 * 60 * 60 * 1000;
+  return (bookings ?? [])
+    .filter((b) => {
+      if (b.status === "booked" && b.at >= startOfLocalDay(now)) return true;
+      if (b.status === "booked" && b.at >= tomorrow) return true;
+      return now - Number(b.seatedAt || b.at) < week;
+    })
+    .slice(-200);
+}
+
+export function addBooking(state, draft) {
+  const name = String(draft.name ?? "").trim();
+  if (!name) return { ok: false, error: "Whose name is the book under?", state };
+  const covers = clampCovers(draft.covers);
+  if (covers < 1) return { ok: false, error: "How many guests?", state };
+  const at = Number(draft.at);
+  if (!Number.isFinite(at) || at <= 0) return { ok: false, error: "Pick a time.", state };
+  const venue = normalizeVenue(state.venue);
+  let tableId = null;
+  if (draft.tableId) {
+    tableId = normalizeTableId(draft.tableId, liveTables(venue));
+    if (!tableId) return { ok: false, error: "No such table.", state };
+    const clash = heldOnTable(state, tableId, at);
+    if (clash) return { ok: false, error: `Table ${tableId} is already held for ${clash.name}.`, state };
+  }
+  const booking = {
+    id: nextId("BK", state.nextBooking || 1),
+    name,
+    covers,
+    phone: String(draft.phone ?? "").trim(),
+    note: String(draft.note ?? "").trim(),
+    tableId,
+    at,
+    status: "booked",
+    seatedAt: null,
+  };
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      bookings: [...(state.bookings ?? []), booking],
+      nextBooking: (state.nextBooking || 1) + 1,
+    },
+  };
+}
+
+export function patchBooking(state, bookingId, patch) {
+  const current = (state.bookings ?? []).find((b) => b.id === bookingId);
+  if (!current) return { ok: false, error: "No such booking.", state };
+  if (current.status !== "booked") return { ok: false, error: "That booking is already closed.", state };
+  const next = { ...current };
+  if (patch.name !== undefined) {
+    const name = String(patch.name).trim();
+    if (!name) return { ok: false, error: "Whose name is the book under?", state };
+    next.name = name;
+  }
+  if (patch.covers !== undefined) {
+    const covers = clampCovers(patch.covers);
+    if (covers < 1) return { ok: false, error: "How many guests?", state };
+    next.covers = covers;
+  }
+  if (patch.phone !== undefined) next.phone = String(patch.phone).trim();
+  if (patch.note !== undefined) next.note = String(patch.note).trim();
+  if (patch.at !== undefined) {
+    const at = Number(patch.at);
+    if (!Number.isFinite(at) || at <= 0) return { ok: false, error: "Pick a time.", state };
+    next.at = at;
+  }
+  if (patch.tableId !== undefined) {
+    if (!patch.tableId) {
+      next.tableId = null;
+    } else {
+      const tableId = normalizeTableId(patch.tableId, liveTables(state.venue));
+      if (!tableId) return { ok: false, error: "No such table.", state };
+      next.tableId = tableId;
+    }
+  }
+  if (next.tableId) {
+    const clash = heldOnTable(state, next.tableId, next.at, bookingId);
+    if (clash) return { ok: false, error: `Table ${next.tableId} is already held for ${clash.name}.`, state };
+  }
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      bookings: (state.bookings ?? []).map((b) => (b.id === bookingId ? next : b)),
+    },
+  };
+}
+
+export function cancelBooking(state, bookingId) {
+  const current = (state.bookings ?? []).find((b) => b.id === bookingId);
+  if (!current || current.status !== "booked") return { ok: false, error: "Nothing to cancel.", state };
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      bookings: (state.bookings ?? []).map((b) => (b.id === bookingId ? { ...b, status: "cancelled" } : b)),
+    },
+  };
+}
+
+export function markNoShow(state, bookingId) {
+  const current = (state.bookings ?? []).find((b) => b.id === bookingId);
+  if (!current || current.status !== "booked") return { ok: false, error: "Nothing to mark.", state };
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      bookings: (state.bookings ?? []).map((b) => (b.id === bookingId ? { ...b, status: "no-show" } : b)),
+    },
+  };
+}
+
+export function seatBooking(state, bookingId, now = Date.now()) {
+  const current = (state.bookings ?? []).find((b) => b.id === bookingId);
+  if (!current || current.status !== "booked") return { ok: false, error: "Nothing to seat.", state };
+  if (!current.tableId) return { ok: false, error: "Hold a table first.", state };
+  const ids = liveTables(state.venue);
+  const claimed = claimTable(state, current.tableId, ids, now);
+  if (!claimed.ok) return claimed;
+  const seated = acceptClaim(claimed.state, current.tableId);
+  if (!seated.ok) return seated;
+  const guestClaims = {
+    ...seated.state.guestClaims,
+    [current.tableId]: {
+      ...seated.state.guestClaims[current.tableId],
+      covers: current.covers,
+      name: current.name,
+      phone: current.phone,
+      bookingId: current.id,
+    },
+  };
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...seated.state,
+      guestClaims,
+      bookings: (state.bookings ?? []).map((b) =>
+        b.id === bookingId ? { ...b, status: "seated", seatedAt: now } : b
+      ),
     },
   };
 }
@@ -889,8 +1298,11 @@ export function checkLabel(check) {
   if (check.channel === "takeaway") {
     return check.guestName ? `${check.queueNumber} · ${check.guestName}` : check.queueNumber;
   }
+  const bits = [`Table ${check.tableId}`];
+  if (check.guestName) bits.push(check.guestName);
   const covers = Number(check.covers) || 0;
-  return covers > 0 ? `Table ${check.tableId} · ${covers}` : `Table ${check.tableId}`;
+  if (covers > 0) bits.push(String(covers));
+  return bits.join(" · ");
 }
 
 export function nextQueueNumber(n) {
@@ -898,24 +1310,32 @@ export function nextQueueNumber(n) {
 }
 
 export function normalizeTableId(raw, tables) {
-  const padded = padTableId(raw);
-  if (!padded) return null;
-  const ids = Array.isArray(tables) ? tables.map((t) => (typeof t === "string" ? t : t.id)) : [];
-  return ids.includes(padded) ? padded : null;
+  const ids = tableIds(tables);
+  const typed = String(raw ?? "")
+    .trim()
+    .replace(/\s+/g, "");
+  if (!typed) return null;
+  const exact = ids.find((id) => tableKey(id) === tableKey(typed));
+  if (exact) return exact;
+  const n = numericTableKey(typed);
+  if (n == null) return null;
+  const hits = ids.filter((id) => numericTableKey(id) === n);
+  return hits.length === 1 ? hits[0] : null;
 }
 
 export function claimTable(state, tableId, tables, now) {
-  if (!tables.includes(tableId)) {
+  const canonical = normalizeTableId(tableId, tables);
+  if (!canonical) {
     return { ok: false, error: "Unknown table.", state };
   }
-  const existing = state.guestClaims?.[tableId];
+  const existing = state.guestClaims?.[canonical];
   const status = guestClaimStatus(existing) === "accepted" ? "accepted" : "pending";
   return {
     ok: true,
     error: null,
     state: {
       ...state,
-      guestClaims: { ...(state.guestClaims ?? {}), [tableId]: { at: now, status } },
+      guestClaims: { ...(state.guestClaims ?? {}), [canonical]: { ...existing, at: now, status } },
     },
   };
 }
@@ -1085,7 +1505,11 @@ export function moveTable(state, fromTableId, toTableId, tables) {
     if (!destClaim) guestClaims[toTableId] = sourceClaim;
   }
 
-  return { ok: true, error: null, state: { ...state, checks, chits, guestClaims } };
+  const bookings = (state.bookings ?? []).map((b) =>
+    b.status === "seated" && b.tableId === fromTableId ? { ...b, tableId: toTableId } : b
+  );
+
+  return { ok: true, error: null, state: { ...state, checks, chits, guestClaims, bookings } };
 }
 
 export const LATE_MS = 8 * 60 * 1000;

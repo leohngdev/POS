@@ -25,10 +25,19 @@ import {
   addTable,
   removeTable,
   patchTable,
+  renameTable,
+  addZone,
+  renameZone,
+  removeZone,
   addOffer,
   removeOffer,
   applyCheckOffer,
   removeCheckOffer,
+  addBooking,
+  patchBooking,
+  cancelBooking,
+  markNoShow,
+  seatBooking,
 } from "../../services/pos";
 import { loadState, writeStore, STORAGE_KEY, toSnapshot } from "../../services/persist";
 import { VENUE } from "../../services/venue";
@@ -215,14 +224,26 @@ export function PosProvider({ children }) {
     changeTableCount(count) {
       return withSync((latest) => setTableCount(latest, count));
     },
-    addFloorTable(id) {
-      return withSync((latest) => addTable(latest, id));
+    addFloorTable(id, zoneId) {
+      return withSync((latest) => addTable(latest, id, zoneId));
     },
     removeFloorTable(id) {
       return withSync((latest) => removeTable(latest, id));
     },
     moveFloorTable(id, patch) {
       return withSync((latest) => patchTable(latest, id, patch));
+    },
+    renameFloorTable(id, next) {
+      return withSync((latest) => renameTable(latest, id, next));
+    },
+    addFloorZone(name) {
+      return withSync((latest) => addZone(latest, name));
+    },
+    renameFloorZone(id, name) {
+      return withSync((latest) => renameZone(latest, id, name));
+    },
+    removeFloorZone(id) {
+      return withSync((latest) => removeZone(latest, id));
     },
     addDish(item) {
       return withSync((latest) => addMenuItem(latest, item));
@@ -250,6 +271,21 @@ export function PosProvider({ children }) {
     },
     closeNight() {
       return withSync((latest) => endNight(latest));
+    },
+    book(draft) {
+      return withSync((latest) => addBooking(latest, draft));
+    },
+    holdTable(bookingId, tableId) {
+      return withSync((latest) => patchBooking(latest, bookingId, { tableId }));
+    },
+    seat(bookingId) {
+      return withSync((latest) => seatBooking(latest, bookingId, Date.now()));
+    },
+    cancelBook(bookingId) {
+      return withSync((latest) => cancelBooking(latest, bookingId));
+    },
+    noShow(bookingId) {
+      return withSync((latest) => markNoShow(latest, bookingId));
     },
     claim(tableId) {
       return withSync((latest) => claimTable(latest, tableId, tablesOf(latest), Date.now()));

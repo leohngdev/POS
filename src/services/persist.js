@@ -18,6 +18,9 @@ function snapshotVenue(venue) {
   if (venue.askTakeawayPhone != null) next.askTakeawayPhone = venue.askTakeawayPhone;
   if (venue.askTakeawayEmail != null) next.askTakeawayEmail = venue.askTakeawayEmail;
   if (venue.lockMins != null) next.lockMins = venue.lockMins;
+  if (Array.isArray(venue.zones)) next.zones = venue.zones;
+  if (venue.useBookings != null) next.useBookings = venue.useBookings;
+  if (venue.bookingMins != null) next.bookingMins = venue.bookingMins;
   return next;
 }
 
@@ -45,6 +48,8 @@ export function toSnapshot(state) {
     lastBumpedChitId: state.lastBumpedChitId,
     guestClaims: normalizeGuestClaims(state.guestClaims),
     receipts: Array.isArray(state.receipts) ? state.receipts : [],
+    bookings: Array.isArray(state.bookings) ? state.bookings : [],
+    nextBooking: Number(state.nextBooking) || 1,
     venue: snapshotVenue(state.venue),
   };
 }
@@ -65,6 +70,8 @@ export function fromSnapshot(raw, baseState) {
     lastBumpedChitId: raw.lastBumpedChitId ?? null,
     guestClaims: normalizeGuestClaims(raw.guestClaims),
     receipts: Array.isArray(raw.receipts) ? raw.receipts : [],
+    bookings: Array.isArray(raw.bookings) ? raw.bookings : [],
+    nextBooking: Number(raw.nextBooking) || 1,
     venue: { ...baseState.venue, ...raw.venue },
   };
 }
