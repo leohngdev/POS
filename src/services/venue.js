@@ -1,4 +1,4 @@
-/** Venue stubs. PIN is a local till gate, not a secret store. Tax flags are the Sprint 2 defaults. */
+/** Venue defaults. PIN/menu/tables/name seed the snapshot; Settings edits persist on schema 1. */
 export const VENUE = {
   name: "POS",
   pin: "1234",

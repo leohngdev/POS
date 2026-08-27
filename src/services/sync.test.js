@@ -55,6 +55,11 @@ describe("venue sync client", () => {
     expect(hasLocalService(createInitialState())).toBe(false);
   });
 
+  it("hasLocalService is true when the venue config left the defaults", () => {
+    const custom = { ...createInitialState(), venue: { ...createInitialState().venue, pin: "9999" } };
+    expect(hasLocalService(custom)).toBe(true);
+  });
+
   it("applies a guest Send on the pulled venue snapshot", async () => {
     const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1).state;
     const applied = await applyOnVenue(

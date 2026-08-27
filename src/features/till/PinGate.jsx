@@ -24,7 +24,7 @@ export function PinGate() {
       <div className="till-gate-box">
         <p className="till-eyebrow">Staff till</p>
         <h1>PIN</h1>
-        <p className="till-muted">Unlock this till. Starter PIN is 1234.</p>
+        <p className="till-muted">Unlock this till. Change the PIN in Settings.</p>
         <div className="till-pin-dots" aria-label="PIN length">
           {(digits.length ? digits.replace(/./g, "•") : "enter PIN")}
         </div>

@@ -1,7 +1,12 @@
-export function MenuGrid({ menu, qtyByItem, onAdd, onRemove, disabled }) {
+import { orderableMenu } from "../../services/pos";
+
+export function MenuGrid({ menu, qtyByItem, notesByItem, onAdd, onRemove, onNote, disabled }) {
+  const items = orderableMenu(menu);
+
   return (
     <div className="till-menu">
-      {menu.map((item) => {
+      {items.length === 0 ? <p className="till-muted">Menu is empty or 86’d</p> : null}
+      {items.map((item) => {
         const qty = qtyByItem[item.id] ?? 0;
         return (
           <div key={item.id} className="till-dish">
@@ -19,6 +24,15 @@ export function MenuGrid({ menu, qtyByItem, onAdd, onRemove, disabled }) {
             >
               −{qty ? ` x${qty}` : ""}
             </button>
+            {qty > 0 && onNote ? (
+              <input
+                className="till-dish-note"
+                placeholder="Kitchen note"
+                value={notesByItem?.[item.id] ?? ""}
+                onChange={(e) => onNote(item.id, e.target.value)}
+                aria-label={`Note for ${item.name}`}
+              />
+            ) : null}
           </div>
         );
       })}

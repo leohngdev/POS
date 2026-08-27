@@ -12,6 +12,8 @@ import {
   tableFloorStatus,
   verifyPin,
   checkTotal,
+  checkDiscount,
+  amountDue,
   updateVenueTaxes,
   clampRate,
   normalizeTableId,
@@ -25,6 +27,13 @@ import {
   voidLastSend,
   canVoidLastSend,
   checkLabel,
+  patchMenuItem,
+  addMenuItem,
+  setTableCount,
+  setPin,
+  orderableMenu,
+  nightReport,
+  endNight,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -484,5 +493,151 @@ describe("Move table and void last Send", () => {
     const voided = voidLastSend(bumped.state, "CHK-1");
     expect(voided.ok).toBe(false);
     expect(bumped.state.chits).toHaveLength(1);
+  });
+});
+
+describe("Line notes, discount, tender, venue config", () => {
+  it("keeps the same dish with different notes as separate lines", () => {
+    const noted = compactLines({ kimchi: 1 }, VENUE.menu, { kimchi: "no spice" });
+    const first = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines: compactLines({ kimchi: 1 }, VENUE.menu),
+      now: 1,
+    });
+    const second = send({
+      state: first.state,
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines: noted,
+      now: 2,
+    });
+    expect(second.state.checks[0].lines).toHaveLength(2);
+    expect(second.state.chits[1].lines[0].note).toBe("no spice");
+  });
+
+  it("takes covers on first Send and discounts the net before GST", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      covers: 3,
+      discountRate: 0.1,
+      now: 1,
+    });
+    const check = sent.state.checks[0];
+    expect(check.covers).toBe(3);
+    expect(checkLabel(check)).toBe("Table 04 · 3");
+    expect(checkDiscount(check)).toBe(2.4);
+    const taxed = updateVenueTaxes(sent.state, { gstEnabled: true, gstRate: 0.1 });
+    expect(checkTotal(check, taxed.venue)).toBe(23.76);
+  });
+
+  it("tenders a partial then closes on the rest as split", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const part = payCheck(sent.state, "CHK-1", "card", 10);
+    expect(part.ok).toBe(true);
+    expect(part.state.checks[0].status).toBe("open");
+    expect(amountDue(part.state.checks[0], part.state.venue)).toBe(14);
+    const done = payCheck(part.state, "CHK-1", "cash");
+    expect(done.state.checks[0].status).toBe("paid");
+    expect(done.state.checks[0].paidVia).toBe("split");
+    expect(done.state.checks[0].payments).toHaveLength(2);
+  });
+
+  it("refuses a tender over remaining", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const over = payCheck(sent.state, "CHK-1", "cash", 100);
+    expect(over.ok).toBe(false);
+    expect(sent.state.checks[0].status).toBe("open");
+  });
+
+  it("86 hides a dish from the orderable menu but keeps it on a check", () => {
+    const sent = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      now: 1,
+    });
+    const eightySixed = patchMenuItem(sent.state, "wagyu", { soldOut: true });
+    expect(orderableMenu(eightySixed.state.venue.menu).some((i) => i.id === "wagyu")).toBe(false);
+    expect(sent.state.checks[0].lines[0].itemId).toBe("wagyu");
+  });
+
+  it("adds a dish and refuses shrinking the floor onto an open table", () => {
+    const added = addMenuItem(createInitialState(), { name: "Banchan", unitPrice: 4 });
+    expect(added.state.venue.menu.at(-1).name).toBe("Banchan");
+    const sent = send({
+      state: added.state,
+      venue: added.state.venue,
+      channel: "dine-in",
+      tableId: "08",
+      lines: compactLines({ wagyu: 1 }, added.state.venue.menu),
+      now: 1,
+    });
+    const shrink = setTableCount(sent.state, 6);
+    expect(shrink.ok).toBe(false);
+    const grow = setTableCount(sent.state, 12);
+    expect(grow.ok).toBe(true);
+    expect(grow.state.venue.tables).toHaveLength(12);
+  });
+
+  it("changes the PIN used at the gate", () => {
+    const changed = setPin(createInitialState(), "9999");
+    expect(verifyPin("9999", changed.state.venue)).toBe(true);
+    expect(verifyPin("1234", changed.state.venue)).toBe(false);
+    expect(setPin(createInitialState(), "12").ok).toBe(false);
+  });
+
+  it("clears paid tickets at end of night and keeps open service", () => {
+    const a = send({
+      state: createInitialState(),
+      venue: VENUE,
+      channel: "dine-in",
+      tableId: "04",
+      lines,
+      covers: 2,
+      now: 1,
+    });
+    const paid = payCheck(a.state, "CHK-1", "card");
+    const b = send({
+      state: paid.state,
+      venue: VENUE,
+      channel: "takeaway",
+      queueNumber: "T-01",
+      guestName: "Sam",
+      lines,
+      now: 2,
+    });
+    const report = nightReport(b.state);
+    expect(report.paidCount).toBe(1);
+    expect(report.openCount).toBe(1);
+    expect(report.card).toBe(24);
+    expect(report.covers).toBe(2);
+    const closed = endNight(b.state);
+    expect(closed.state.checks).toHaveLength(1);
+    expect(closed.state.checks[0].channel).toBe("takeaway");
+    expect(closed.state.chits).toHaveLength(1);
   });
 });

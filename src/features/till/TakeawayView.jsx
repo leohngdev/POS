@@ -13,10 +13,11 @@ function bumpQty(map, id, delta) {
 export function TakeawayView() {
   const { state, venue, sendOrder } = usePos();
   const [draft, setDraft] = useState({});
+  const [notes, setNotes] = useState({});
   const [name, setName] = useState("");
   const [notice, setNotice] = useState(null);
   const queueNumber = nextQueueNumber(state.nextTakeaway);
-  const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
+  const lines = useMemo(() => compactLines(draft, venue.menu, notes), [draft, venue.menu, notes]);
 
   async function send() {
     const result = await sendOrder({
@@ -30,8 +31,9 @@ export function TakeawayView() {
       setNotice(result.error);
       return;
     }
-    setDraft({});
-    setName("");
+      setDraft({});
+      setNotes({});
+      setName("");
     setNotice(`Sent ${queueNumber}`);
   }
 
@@ -41,11 +43,25 @@ export function TakeawayView() {
         <MenuGrid
           menu={venue.menu}
           qtyByItem={draft}
+          notesByItem={notes}
           onAdd={(id) => {
             setNotice(null);
             setDraft((d) => bumpQty(d, id, 1));
           }}
-          onRemove={(id) => setDraft((d) => bumpQty(d, id, -1))}
+          onRemove={(id) => {
+            setDraft((d) => {
+              const next = bumpQty(d, id, -1);
+              if (!next[id]) {
+                setNotes((n) => {
+                  const copy = { ...n };
+                  delete copy[id];
+                  return copy;
+                });
+              }
+              return next;
+            });
+          }}
+          onNote={(id, text) => setNotes((n) => ({ ...n, [id]: text }))}
         />
       </main>
       <BillPanel

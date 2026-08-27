@@ -79,8 +79,9 @@ export function KitchenView() {
                 <div className={late ? "till-timer late" : "till-timer"}>{mins}m</div>
                 <ul className="till-chit-lines">
                   {chit.lines.map((line) => (
-                    <li key={line.itemId}>
+                    <li key={`${line.itemId}-${line.note ?? ""}`}>
                       x{line.qty} {line.name}
+                      {line.note ? <em className="till-line-note"> — {line.note}</em> : null}
                     </li>
                   ))}
                 </ul>

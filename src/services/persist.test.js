@@ -103,4 +103,41 @@ describe("persist", () => {
     const loaded = fromSnapshot(toSnapshot(seated), createInitialState());
     expect(loaded.guestClaims["04"].status).toBe("accepted");
   });
+
+  it("round-trips live venue config on schema 1", () => {
+    const base = createInitialState();
+    const custom = {
+      ...base,
+      venue: {
+        ...base.venue,
+        name: "Hanok",
+        pin: "4321",
+        tables: ["01", "02"],
+        menu: [{ id: "tea", name: "Barley tea", unitPrice: 3, soldOut: false }],
+      },
+    };
+    const loaded = fromSnapshot(toSnapshot(custom), createInitialState());
+    expect(loaded.venue.name).toBe("Hanok");
+    expect(loaded.venue.pin).toBe("4321");
+    expect(loaded.venue.tables).toEqual(["01", "02"]);
+    expect(loaded.venue.menu[0].name).toBe("Barley tea");
+  });
+
+  it("keeps default menu when an old snapshot only stored tax flags", () => {
+    const raw = {
+      schema: 1,
+      checks: [],
+      chits: [],
+      nextCheck: 1,
+      nextChit: 1,
+      nextTakeaway: 1,
+      lastBumpedChitId: null,
+      guestClaims: {},
+      venue: { gstEnabled: true, gstRate: 0.1, surchargeEnabled: false, surchargeRate: 0.1 },
+    };
+    const loaded = fromSnapshot(raw, createInitialState());
+    expect(loaded.venue.gstEnabled).toBe(true);
+    expect(loaded.venue.menu[0].id).toBe("wagyu");
+    expect(loaded.venue.pin).toBe("1234");
+  });
 });

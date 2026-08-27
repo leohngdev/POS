@@ -1,6 +1,21 @@
 export const STORAGE_KEY = "pos.till.v1";
 export const SCHEMA = 1;
 
+function snapshotVenue(venue) {
+  if (!venue || typeof venue !== "object") return {};
+  const next = {
+    gstEnabled: Boolean(venue.gstEnabled),
+    gstRate: venue.gstRate,
+    surchargeEnabled: Boolean(venue.surchargeEnabled),
+    surchargeRate: venue.surchargeRate,
+  };
+  if (venue.name != null) next.name = venue.name;
+  if (venue.pin != null) next.pin = venue.pin;
+  if (Array.isArray(venue.tables)) next.tables = venue.tables;
+  if (Array.isArray(venue.menu)) next.menu = venue.menu;
+  return next;
+}
+
 function normalizeGuestClaims(raw) {
   if (!raw || typeof raw !== "object") return {};
   const next = {};
@@ -24,12 +39,7 @@ export function toSnapshot(state) {
     nextTakeaway: state.nextTakeaway,
     lastBumpedChitId: state.lastBumpedChitId,
     guestClaims: normalizeGuestClaims(state.guestClaims),
-    venue: {
-      gstEnabled: Boolean(state.venue.gstEnabled),
-      gstRate: state.venue.gstRate,
-      surchargeEnabled: Boolean(state.venue.surchargeEnabled),
-      surchargeRate: state.venue.surchargeRate,
-    },
+    venue: snapshotVenue(state.venue),
   };
 }
 
@@ -48,10 +58,7 @@ export function fromSnapshot(raw, baseState) {
     nextTakeaway: Number(raw.nextTakeaway) || 1,
     lastBumpedChitId: raw.lastBumpedChitId ?? null,
     guestClaims: normalizeGuestClaims(raw.guestClaims),
-    venue: {
-      ...baseState.venue,
-      ...raw.venue,
-    },
+    venue: { ...baseState.venue, ...raw.venue },
   };
 }
 

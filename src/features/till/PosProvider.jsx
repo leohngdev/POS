@@ -6,12 +6,21 @@ import {
   bumpChit,
   undoLastBump,
   updateVenueTaxes,
+  setVenueName,
+  setPin,
+  setTableCount,
+  addMenuItem,
+  patchMenuItem,
+  setCheckCovers,
+  setCheckDiscount,
+  endNight,
   claimTable,
   rejectClaim,
   releaseClaim,
   acceptClaim,
   moveTable,
   voidLastSend,
+  liveTables,
 } from "../../services/pos";
 import { loadState, writeStore, STORAGE_KEY, toSnapshot } from "../../services/persist";
 import { VENUE } from "../../services/venue";
@@ -41,6 +50,10 @@ function fromStore(session) {
   if (typeof localStorage === "undefined") return session;
   const loaded = loadState(createInitialState(), localStorage);
   return { ...loaded, unlocked: session.unlocked, pinError: session.pinError };
+}
+
+function tablesOf(state) {
+  return liveTables(state.venue);
 }
 
 export function PosProvider({ children }) {
@@ -123,10 +136,6 @@ export function PosProvider({ children }) {
     venue,
     syncStatus,
     unlock(pin) {
-      if (pin !== VENUE.pin) {
-        dispatch({ type: "unlock-fail" });
-        return;
-      }
       mutatingRef.current = true;
       pullSnapshot()
         .then((pulled) => {
@@ -140,6 +149,11 @@ export function PosProvider({ children }) {
           } else {
             setSyncStatus("local");
           }
+          const livePin = base.venue?.pin ?? VENUE.pin;
+          if (pin !== livePin) {
+            dispatch({ type: "unlock-fail" });
+            return;
+          }
           dispatch({ type: "replace", state: { ...base, unlocked: true, pinError: null } });
         })
         .finally(() => {
@@ -152,8 +166,8 @@ export function PosProvider({ children }) {
     sendOrder(payload) {
       return withSync((latest) => send({ state: latest, venue: { ...VENUE, ...latest.venue }, now: Date.now(), ...payload }));
     },
-    pay(checkId, paidVia) {
-      return withSync((latest) => payCheck(latest, checkId, paidVia));
+    pay(checkId, paidVia, amount) {
+      return withSync((latest) => payCheck(latest, checkId, paidVia, amount));
     },
     bump(chitId) {
       return withSync((latest) => bumpChit(latest, chitId, Date.now()));
@@ -164,8 +178,32 @@ export function PosProvider({ children }) {
     setVenueTaxes(patch) {
       return withSync((latest) => ({ ok: true, error: null, state: updateVenueTaxes(latest, patch) }));
     },
+    renameVenue(name) {
+      return withSync((latest) => setVenueName(latest, name));
+    },
+    changePin(pin) {
+      return withSync((latest) => setPin(latest, pin));
+    },
+    changeTableCount(count) {
+      return withSync((latest) => setTableCount(latest, count));
+    },
+    addDish(item) {
+      return withSync((latest) => addMenuItem(latest, item));
+    },
+    patchDish(itemId, patch) {
+      return withSync((latest) => patchMenuItem(latest, itemId, patch));
+    },
+    setCovers(checkId, covers) {
+      return withSync((latest) => setCheckCovers(latest, checkId, covers));
+    },
+    setDiscount(checkId, rate) {
+      return withSync((latest) => setCheckDiscount(latest, checkId, rate));
+    },
+    closeNight() {
+      return withSync((latest) => endNight(latest));
+    },
     claim(tableId) {
-      return withSync((latest) => claimTable(latest, tableId, VENUE.tables, Date.now()));
+      return withSync((latest) => claimTable(latest, tableId, tablesOf(latest), Date.now()));
     },
     release(tableId) {
       return withSync((latest) => releaseClaim(latest, tableId));
@@ -177,7 +215,7 @@ export function PosProvider({ children }) {
       return withSync((latest) => acceptClaim(latest, tableId));
     },
     move(fromTableId, toTableId) {
-      return withSync((latest) => moveTable(latest, fromTableId, toTableId, VENUE.tables));
+      return withSync((latest) => moveTable(latest, fromTableId, toTableId, tablesOf(latest)));
     },
     voidSend(checkId) {
       return withSync((latest) => voidLastSend(latest, checkId));

@@ -1,4 +1,4 @@
-import { createInitialState } from "./pos";
+import { createInitialState, isCustomVenue } from "./pos";
 import { fromSnapshot, toSnapshot } from "./persist";
 
 export const SNAPSHOT_URL = "/api/snapshot";
@@ -43,7 +43,8 @@ export function hasLocalService(state) {
   return (
     (state.checks?.length ?? 0) > 0 ||
     (state.chits?.length ?? 0) > 0 ||
-    Object.keys(state.guestClaims ?? {}).length > 0
+    Object.keys(state.guestClaims ?? {}).length > 0 ||
+    isCustomVenue(state.venue)
   );
 }
 

@@ -1,8 +1,16 @@
 import { useMemo, useState } from "react";
-import { compactLines, canVoidLastSend, moveTargets, openCheckForTable, tableClaimStatus, tableFloorStatus } from "../../services/pos";
+import {
+  amountDue,
+  compactLines,
+  canVoidLastSend,
+  moveTargets,
+  openCheckForTable,
+  tableClaimStatus,
+  tableFloorStatus,
+} from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { MenuGrid } from "./MenuGrid";
-import { BillPanel } from "./BillPanel";
+import { BillPanel, PayPad } from "./BillPanel";
 import { ClaimActions } from "./ClaimActions";
 import { TableOps } from "./TableOps";
 
@@ -28,31 +36,44 @@ function tableTags(claim, floor) {
 }
 
 export function DineInView() {
-  const { state, venue, sendOrder, reject, accept, move, voidSend } = usePos();
+  const { state, venue, sendOrder, reject, accept, move, voidSend, pay, setCovers, setDiscount } = usePos();
   const [tableId, setTableId] = useState(null);
   const [draft, setDraft] = useState({});
+  const [notes, setNotes] = useState({});
   const [notice, setNotice] = useState(null);
   const [moving, setMoving] = useState(false);
+  const [draftCovers, setDraftCovers] = useState(0);
+  const [draftDiscount, setDraftDiscount] = useState(0);
+  const [tenderAmt, setTenderAmt] = useState("");
 
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
   const ordering = Boolean(tableId);
-  const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
+  const lines = useMemo(() => compactLines(draft, venue.menu, notes), [draft, venue.menu, notes]);
   const billLines = lines.length ? lines : openCheck?.lines ?? [];
   const selectedClaim = tableId ? tableClaimStatus(state, tableId) : null;
   const targets = tableId ? moveTargets(state, venue.tables, tableId) : [];
+  const coversValue = openCheck ? openCheck.covers ?? 0 : draftCovers;
+  const discountPct = openCheck ? Math.round((openCheck.discountRate ?? 0) * 1000) / 10 : draftDiscount;
 
   function chooseTable(id) {
     setTableId(id);
     setDraft({});
+    setNotes({});
     setNotice(null);
     setMoving(false);
+    setTenderAmt("");
+    const check = openCheckForTable(state.checks, id);
+    setDraftCovers(check?.covers ?? 0);
+    setDraftDiscount(Math.round((check?.discountRate ?? 0) * 1000) / 10);
   }
 
   function backToFloor() {
     setTableId(null);
     setDraft({});
+    setNotes({});
     setNotice(null);
     setMoving(false);
+    setTenderAmt("");
   }
 
   function send() {
@@ -60,13 +81,48 @@ export function DineInView() {
       channel: "dine-in",
       tableId,
       lines,
+      covers: coversValue,
+      discountRate: discountPct / 100,
     }).then((result) => {
       if (!result.ok) {
         setNotice(result.error);
         return;
       }
       setDraft({});
+      setNotes({});
       setNotice("Sent to kitchen");
+    });
+  }
+
+  function onCovers(raw) {
+    const n = Number(raw);
+    if (openCheck) {
+      setCovers(openCheck.id, n);
+      return;
+    }
+    setDraftCovers(n);
+  }
+
+  function onDiscount(raw) {
+    const n = Number(raw);
+    if (Number.isNaN(n)) return;
+    if (openCheck) {
+      setDiscount(openCheck.id, n / 100);
+      return;
+    }
+    setDraftDiscount(n);
+  }
+
+  function settle(via) {
+    if (!openCheck) return;
+    const amount = tenderAmt === "" ? undefined : Number(tenderAmt);
+    pay(openCheck.id, via, amount).then((result) => {
+      if (!result.ok) {
+        setNotice(result.error);
+        return;
+      }
+      setTenderAmt("");
+      setNotice(result.state.checks.find((c) => c.id === openCheck.id)?.status === "paid" ? `Paid · ${via}` : `Tendered ${via}`);
     });
   }
 
@@ -122,12 +178,26 @@ export function DineInView() {
             <MenuGrid
               menu={venue.menu}
               qtyByItem={draft}
+              notesByItem={notes}
               disabled={false}
               onAdd={(id) => {
                 setNotice(null);
                 setDraft((d) => bumpQty(d, id, 1));
               }}
-              onRemove={(id) => setDraft((d) => bumpQty(d, id, -1))}
+              onRemove={(id) => {
+                setDraft((d) => {
+                  const next = bumpQty(d, id, -1);
+                  if (!next[id]) {
+                    setNotes((n) => {
+                      const copy = { ...n };
+                      delete copy[id];
+                      return copy;
+                    });
+                  }
+                  return next;
+                });
+              }}
+              onNote={(id, text) => setNotes((n) => ({ ...n, [id]: text }))}
             />
           </>
         )}
@@ -136,6 +206,7 @@ export function DineInView() {
         title={tableId ? `Table ${tableId}` : "No table yet"}
         lines={billLines}
         venue={venue}
+        check={lines.length ? undefined : openCheck}
         extra={
           selectedClaim === "pending" ? (
             <p className="till-muted">Guest claimed this table. Accept to seat them, or Reject to kick them off.</p>
@@ -153,6 +224,31 @@ export function DineInView() {
         primaryDisabled={!tableId || lines.length === 0}
         onPrimary={tableId ? send : undefined}
       >
+        {ordering ? (
+          <div className="till-check-meta">
+            <label className="till-name">
+              Covers
+              <input
+                type="number"
+                min="0"
+                max="99"
+                value={coversValue}
+                onChange={(e) => onCovers(e.target.value)}
+              />
+            </label>
+            <label className="till-name">
+              Discount %
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={discountPct}
+                onChange={(e) => onDiscount(e.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
         {ordering ? (
           <ClaimActions status={selectedClaim} onAccept={() => accept(tableId)} onReject={() => reject(tableId)} />
         ) : null}
@@ -189,7 +285,30 @@ export function DineInView() {
             }
           />
         ) : null}
-        {notice ? <p className={notice.startsWith("Sent") || notice.startsWith("Moved") || notice.startsWith("Voided") ? "till-ok" : "till-error"}>{notice}</p> : null}
+        {openCheck && lines.length === 0 ? (
+          <PayPad
+            due={amountDue(openCheck, venue)}
+            amount={tenderAmt}
+            onAmount={setTenderAmt}
+            onPay={settle}
+            disabled={openCheck.status !== "open"}
+          />
+        ) : null}
+        {notice ? (
+          <p
+            className={
+              notice.startsWith("Sent") ||
+              notice.startsWith("Moved") ||
+              notice.startsWith("Voided") ||
+              notice.startsWith("Paid") ||
+              notice.startsWith("Tendered")
+                ? "till-ok"
+                : "till-error"
+            }
+          >
+            {notice}
+          </p>
+        ) : null}
       </BillPanel>
     </>
   );

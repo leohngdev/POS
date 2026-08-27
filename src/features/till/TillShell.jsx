@@ -17,14 +17,14 @@ const NAV = [
 
 export function TillShell() {
   const [nav, setNav] = useState("dine-in");
-  const { lock, syncStatus, state } = usePos();
+  const { lock, syncStatus, state, venue } = usePos();
   const wide = nav === "kitchen" || nav === "settings";
   const guestWaiting = hasPendingGuestClaims(state);
 
   return (
     <div className={`till-root till-shell${wide ? " till-shell-kitchen" : ""}`}>
       <aside className="till-nav">
-        <div className="till-brand">TILL</div>
+        <div className="till-brand">{venue.name || "TILL"}</div>
         <p className="till-sync">{syncStatus === "live" ? "Venue live" : "This device only"}</p>
         {NAV.map((item) => (
           <button

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  amountDue,
   canVoidLastSend,
   checkFloorStatus,
   checkLabel,
@@ -11,7 +12,7 @@ import {
   tableClaimStatus,
 } from "../../services/pos";
 import { usePos } from "./PosProvider";
-import { BillPanel } from "./BillPanel";
+import { BillPanel, PayPad } from "./BillPanel";
 import { ClaimActions } from "./ClaimActions";
 import { TableOps } from "./TableOps";
 
@@ -30,11 +31,12 @@ function TicketCard({ title, detail, chip, selected, claimed, collapsed, paid, o
 }
 
 export function TicketsView() {
-  const { state, venue, pay, accept, reject, move, voidSend } = usePos();
+  const { state, venue, pay, accept, reject, move, voidSend, setDiscount } = usePos();
   const [selectedId, setSelectedId] = useState(null);
   const [waitTable, setWaitTable] = useState(null);
   const [notice, setNotice] = useState(null);
   const [moving, setMoving] = useState(false);
+  const [tenderAmt, setTenderAmt] = useState("");
 
   const waiting = pendingGuestTables(state, venue.tables);
   const waitingSet = new Set(waiting);
@@ -55,12 +57,15 @@ export function TicketsView() {
 
   async function settle(via) {
     if (!selected || selected.status === "paid") return;
-    const result = await pay(selected.id, via);
+    const amount = tenderAmt === "" ? undefined : Number(tenderAmt);
+    const result = await pay(selected.id, via, amount);
     if (!result.ok) {
       setNotice(result.error);
       return;
     }
-    setNotice(`Marked ${via}`);
+    setTenderAmt("");
+    const next = result.state.checks.find((c) => c.id === selected.id);
+    setNotice(next?.status === "paid" ? `Marked ${next.paidVia}` : `Tendered ${via}`);
   }
 
   function pickCheck(id) {
@@ -68,6 +73,7 @@ export function TicketsView() {
     setWaitTable(null);
     setNotice(null);
     setMoving(false);
+    setTenderAmt("");
   }
 
   function pickWait(tableId) {
@@ -76,6 +82,7 @@ export function TicketsView() {
     setWaitTable(tableId);
     setNotice(null);
     setMoving(false);
+    setTenderAmt("");
   }
 
   return (
@@ -160,6 +167,7 @@ export function TicketsView() {
           title={selected ? checkLabel(selected) : `Table ${waitTable}`}
           lines={selected?.lines ?? []}
           venue={venue}
+          check={selected}
           extra={
             <p className="till-muted">
               {claim === "pending"
@@ -216,16 +224,44 @@ export function TicketsView() {
                 : undefined
             }
           />
-          {notice ? <p className={notice.startsWith("Marked") || notice.startsWith("Moved") || notice.startsWith("Voided") ? "till-ok" : "till-error"}>{notice}</p> : null}
+          {notice ? (
+            <p
+              className={
+                notice.startsWith("Marked") ||
+                notice.startsWith("Moved") ||
+                notice.startsWith("Voided") ||
+                notice.startsWith("Tendered")
+                  ? "till-ok"
+                  : "till-error"
+              }
+            >
+              {notice}
+            </p>
+          ) : null}
           {selected?.status === "open" ? (
-            <div className="till-pay-pair">
-              <button type="button" className="till-primary" onClick={() => settle("card")}>
-                Card
-              </button>
-              <button type="button" className="till-primary" onClick={() => settle("cash")}>
-                Cash
-              </button>
-            </div>
+            <>
+              <label className="till-name">
+                Discount %
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={Math.round((selected.discountRate ?? 0) * 1000) / 10}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (Number.isNaN(n)) return;
+                    setDiscount(selected.id, n / 100);
+                  }}
+                />
+              </label>
+              <PayPad
+                due={amountDue(selected, venue)}
+                amount={tenderAmt}
+                onAmount={setTenderAmt}
+                onPay={settle}
+              />
+            </>
           ) : null}
         </BillPanel>
       ) : (

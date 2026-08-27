@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CLAIM_REQUIRED,
-  checkSubtotal,
-  checkTotal,
   compactLines,
   hasGuestClaim,
   lastPaidCheckForTable,
@@ -13,6 +11,7 @@ import {
   tableClaimStatus,
 } from "../../services/pos";
 import { usePos } from "../till/PosProvider";
+import { CheckTotals } from "../till/BillPanel";
 import { MenuGrid } from "../till/MenuGrid";
 
 function bumpQty(map, id, delta) {
@@ -22,41 +21,21 @@ function bumpQty(map, id, delta) {
 }
 
 function GuestBill({ check, venue }) {
-  const sub = checkSubtotal(check);
-  const total = checkTotal(check, venue);
   return (
     <section className="guest-bill">
       <h2>This table’s check</h2>
       <ul className="till-lines">
         {check.lines.map((line) => (
-          <li key={line.itemId}>
-            x{line.qty} {line.name}
+          <li key={`${line.itemId}-${line.note ?? ""}`}>
+            <span>
+              x{line.qty} {line.name}
+              {line.note ? <em className="till-line-note"> — {line.note}</em> : null}
+            </span>
             <span>{money(lineTotal(line))}</span>
           </li>
         ))}
       </ul>
-      <div className="till-totals">
-        <div>
-          <span>Subtotal</span>
-          <span>{money(sub)}</span>
-        </div>
-        {venue.gstEnabled ? (
-          <div>
-            <span>GST</span>
-            <span>{money(sub * venue.gstRate)}</span>
-          </div>
-        ) : null}
-        {venue.surchargeEnabled ? (
-          <div>
-            <span>Surcharge</span>
-            <span>{money(sub * venue.surchargeRate)}</span>
-          </div>
-        ) : null}
-        <div className="till-grand">
-          <span>Total</span>
-          <span>{money(total)}</span>
-        </div>
-      </div>
+      <CheckTotals check={check} venue={venue} />
     </section>
   );
 }
@@ -66,8 +45,9 @@ export function GuestOrder({ initialTable }) {
   const [tableId, setTableId] = useState(null);
   const [typed, setTyped] = useState("");
   const [draft, setDraft] = useState({});
+  const [notes, setNotes] = useState({});
   const [notice, setNotice] = useState(null);
-  const lines = useMemo(() => compactLines(draft, venue.menu), [draft, venue.menu]);
+  const lines = useMemo(() => compactLines(draft, venue.menu, notes), [draft, venue.menu, notes]);
   const openCheck = tableId ? openCheckForTable(state.checks, tableId) : null;
   const lastPaid = tableId && !openCheck ? lastPaidCheckForTable(state.checks, tableId) : null;
   const seated = tableId ? tableClaimStatus(state, tableId) === "accepted" : false;
@@ -97,6 +77,7 @@ export function GuestOrder({ initialTable }) {
     }
     setTableId(id);
     setDraft({});
+    setNotes({});
     setNotice(null);
   }
 
@@ -116,6 +97,7 @@ export function GuestOrder({ initialTable }) {
     if (!tableId || hasGuestClaim(state, tableId)) return;
     setTableId(null);
     setDraft({});
+    setNotes({});
     setNotice(CLAIM_REQUIRED);
   }, [tableId, state.guestClaims]);
 
@@ -132,6 +114,7 @@ export function GuestOrder({ initialTable }) {
     if (tableId) await release(tableId);
     setTableId(null);
     setDraft({});
+    setNotes({});
     setNotice(null);
   }
 
@@ -142,10 +125,12 @@ export function GuestOrder({ initialTable }) {
       if (!hasGuestClaim(result.state, tableId)) {
         setTableId(null);
         setDraft({});
+        setNotes({});
       }
       return;
     }
     setDraft({});
+    setNotes({});
     setNotice("Sent to kitchen");
   }
 
@@ -157,6 +142,7 @@ export function GuestOrder({ initialTable }) {
       return;
     }
     setDraft({});
+    setNotes({});
     setNotice(via === "card" ? "Paid · card" : "Paid · cash");
   }
 
@@ -198,11 +184,25 @@ export function GuestOrder({ initialTable }) {
           <MenuGrid
             menu={venue.menu}
             qtyByItem={draft}
+            notesByItem={notes}
             onAdd={(id) => {
               setNotice(null);
               setDraft((d) => bumpQty(d, id, 1));
             }}
-            onRemove={(id) => setDraft((d) => bumpQty(d, id, -1))}
+            onRemove={(id) => {
+              setDraft((d) => {
+                const next = bumpQty(d, id, -1);
+                if (!next[id]) {
+                  setNotes((n) => {
+                    const copy = { ...n };
+                    delete copy[id];
+                    return copy;
+                  });
+                }
+                return next;
+              });
+            }}
+            onNote={(id, text) => setNotes((n) => ({ ...n, [id]: text }))}
           />
           {openCheck ? <GuestBill check={openCheck} venue={venue} /> : null}
           {notice ? (
