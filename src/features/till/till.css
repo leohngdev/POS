@@ -846,6 +846,143 @@
   opacity: 0.55;
 }
 
+.till-party {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  background: var(--color-surface);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.till-party.on {
+  border-color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+}
+
+.till-party-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.till-party span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.till-party-tag {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text);
+}
+
+.till-party-tag.paid,
+.till-party.paid {
+  border-color: var(--color-positive);
+}
+
+.till-party-tag.muted {
+  color: var(--color-muted);
+}
+
+.till-cal {
+  max-width: 360px;
+  margin-bottom: var(--space-4);
+}
+
+.till-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.till-cal-dow,
+.till-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+
+.till-cal-dow span {
+  font-size: 11px;
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.till-cal-day {
+  border: 1px solid transparent;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 8px 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.till-cal-day.on {
+  border-color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 22%, var(--color-surface));
+  font-weight: 700;
+}
+
+.till-cal-time {
+  margin-top: var(--space-3);
+}
+
+.till-stock-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-6);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.till-stock-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  background: var(--color-surface);
+}
+
+.till-stock-row div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.till-stock-row span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.till-stock-step {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.till-stock-step input {
+  width: 72px;
+  font: inherit;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+}
+
 .till-diary-actions {
   display: flex;
   flex-wrap: wrap;
@@ -853,7 +990,7 @@
 }
 
 .till-table-edit {
-  grid-template-columns: 72px 88px minmax(72px, 1fr) 64px auto;
+  grid-template-columns: 72px 88px minmax(72px, 1fr) 64px auto auto auto;
 }
 
 .till-zone-edit {

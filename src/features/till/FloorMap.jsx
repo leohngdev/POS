@@ -5,6 +5,7 @@ import {
   bookingAtTable,
   formatClock,
   nextBookingForTable,
+  partyOnTable,
   tableFloorStatus,
   tableClaimStatus,
 } from "../../services/pos";
@@ -74,9 +75,10 @@ export function FloorMap({
         const claim = !preview && state ? tableClaimStatus(state, table.id) : null;
         const floor = !preview && state ? tableFloorStatus(state, table.id) : "empty";
         const hold = state ? (preview ? bookingAtTable(state, table.id, when) : nextBookingForTable(state, table.id, Date.now())) : null;
+        const party = state ? partyOnTable(state, table.id, when) : null;
         const floorTag = floor === "cooking" ? "Cooking" : floor === "ready" ? "To pay" : null;
-        const guestTag = claim === "pending" ? "Guest" : claim === "accepted" ? "Seated" : null;
-        const bookTag = hold ? `${hold.name} · ${formatClock(hold.at)}` : null;
+        const guestTag = claim === "pending" ? "Guest" : claim === "accepted" ? party?.name || "Seated" : null;
+        const bookTag = hold ? `${hold.name} · ${formatClock(hold.at)}` : party && preview ? `${party.name} · ${formatClock(party.at)}` : null;
         return (
           <div
             key={table.id}

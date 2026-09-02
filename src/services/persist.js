@@ -21,6 +21,8 @@ function snapshotVenue(venue) {
   if (Array.isArray(venue.zones)) next.zones = venue.zones;
   if (venue.useBookings != null) next.useBookings = venue.useBookings;
   if (venue.bookingMins != null) next.bookingMins = venue.bookingMins;
+  if (venue.useStock != null) next.useStock = venue.useStock;
+  if (Array.isArray(venue.stockItems)) next.stockItems = venue.stockItems;
   return next;
 }
 
@@ -33,6 +35,10 @@ function normalizeGuestClaims(raw) {
       at: claim.at,
       status: claim.status === "accepted" ? "accepted" : "pending",
     };
+    if (claim.covers != null) next[id].covers = claim.covers;
+    if (claim.name) next[id].name = String(claim.name);
+    if (claim.phone) next[id].phone = String(claim.phone);
+    if (claim.bookingId) next[id].bookingId = String(claim.bookingId);
   }
   return next;
 }
@@ -50,6 +56,9 @@ export function toSnapshot(state) {
     receipts: Array.isArray(state.receipts) ? state.receipts : [],
     bookings: Array.isArray(state.bookings) ? state.bookings : [],
     nextBooking: Number(state.nextBooking) || 1,
+    nextStockOrder: Number(state.nextStockOrder) || 1,
+    stock: state.stock ?? { countedAt: null, qty: {}, extra: {} },
+    stockOrders: Array.isArray(state.stockOrders) ? state.stockOrders : [],
     venue: snapshotVenue(state.venue),
   };
 }
@@ -72,6 +81,9 @@ export function fromSnapshot(raw, baseState) {
     receipts: Array.isArray(raw.receipts) ? raw.receipts : [],
     bookings: Array.isArray(raw.bookings) ? raw.bookings : [],
     nextBooking: Number(raw.nextBooking) || 1,
+    nextStockOrder: Number(raw.nextStockOrder) || 1,
+    stock: raw.stock && typeof raw.stock === "object" ? raw.stock : { countedAt: null, qty: {}, extra: {} },
+    stockOrders: Array.isArray(raw.stockOrders) ? raw.stockOrders : [],
     venue: { ...baseState.venue, ...raw.venue },
   };
 }

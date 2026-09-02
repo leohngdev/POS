@@ -1,16 +1,21 @@
 import { useMemo, useState } from "react";
 import {
-  daySlots,
-  defaultBookSlot,
   formatClock,
+  formatDay,
+  fromDateAndTime,
   liveZones,
+  monthGrid,
+  partyOnTable,
+  shiftMonth,
   startOfLocalDay,
   tableRecords,
   tablesInZone,
+  timeValue,
   tonightBookings,
 } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { FloorMap } from "./FloorMap";
+import { PartyCard } from "./PartyCard";
 
 function ZoneChips({ zones, zoneId, onPick }) {
   if (zones.length < 2) return null;
@@ -35,21 +40,26 @@ function ZoneChips({ zones, zoneId, onPick }) {
 
 export function BookView() {
   const { state, venue, book, holdTable, seat, cancelBook, noShow } = usePos();
-  const [dayOffset, setDayOffset] = useState(0);
-  const [slot, setSlot] = useState(() => defaultBookSlot(Date.now()));
+  const [at, setAt] = useState(() => Date.now());
+  const [time, setTime] = useState(() => timeValue(Date.now()));
   const [zoneId, setZoneId] = useState("all");
   const [tableId, setTableId] = useState(null);
   const [name, setName] = useState("");
   const [covers, setCovers] = useState("2");
   const [phone, setPhone] = useState("");
   const [notice, setNotice] = useState(null);
+  const [pickedId, setPickedId] = useState(null);
   const zones = liveZones(venue);
   const records = tablesInZone(venue, zoneId);
   const allTables = tableRecords(venue);
-  const day = startOfLocalDay(Date.now()) + dayOffset * 24 * 60 * 60 * 1000;
-  const slots = useMemo(() => daySlots(day), [day]);
-  const previewAt = slots.includes(slot) ? slot : slots[0] ?? day;
-  const diary = tonightBookings(state.bookings, day);
+  const previewAt = fromDateAndTime(
+    `${new Date(at).getFullYear()}-${String(new Date(at).getMonth() + 1).padStart(2, "0")}-${String(new Date(at).getDate()).padStart(2, "0")}`,
+    time
+  ) ?? at;
+  const grid = useMemo(() => monthGrid(at), [at]);
+  const diary = tonightBookings(state.bookings, previewAt);
+  const selectedParty =
+    (pickedId && (state.bookings ?? []).find((b) => b.id === pickedId)) || partyOnTable(state, tableId, previewAt);
 
   function flash(result, okText) {
     if (!result.ok) {
@@ -60,13 +70,15 @@ export function BookView() {
     return true;
   }
 
-  function pickSlot(at) {
-    setSlot(at);
+  function pickDay(dayAt) {
+    setAt(dayAt);
     setNotice(null);
   }
 
   function pickTable(id) {
-    setTableId((cur) => (cur === id ? null : id));
+    setTableId(id);
+    const party = partyOnTable(state, id, previewAt);
+    setPickedId(party?.id ?? null);
     setNotice(null);
   }
 
@@ -81,6 +93,9 @@ export function BookView() {
       if (!flash(result, `Booked ${name.trim() || ""}`.trim())) return;
       setName("");
       setPhone("");
+      if (result.state.bookings?.length) {
+        setPickedId(result.state.bookings[result.state.bookings.length - 1].id);
+      }
     });
   }
 
@@ -88,32 +103,90 @@ export function BookView() {
     <>
       <main className="till-workspace">
         <h1>Book</h1>
-        <p className="till-muted">Tonight’s names on this floor. Walk-ins still use Dine in. Hold is {venue.bookingMins} minutes.</p>
-        <div className="till-strip">
-          <button type="button" className={dayOffset === 0 ? "till-table till-table-sm on" : "till-table till-table-sm"} onClick={() => setDayOffset(0)}>
-            Today
-          </button>
-          <button type="button" className={dayOffset === 1 ? "till-table till-table-sm on" : "till-table till-table-sm"} onClick={() => setDayOffset(1)}>
-            Tomorrow
-          </button>
+        <p className="till-muted">
+          {formatDay(previewAt)} · {formatClock(previewAt)}. Hold is {venue.bookingMins} minutes. Walk-ins still use Dine in.
+        </p>
+        <div className="till-cal">
+          <div className="till-cal-head">
+            <button type="button" className="till-ghost" onClick={() => setAt(shiftMonth(at, -1))} aria-label="Previous month">
+              ‹
+            </button>
+            <strong>{grid.label}</strong>
+            <button type="button" className="till-ghost" onClick={() => setAt(shiftMonth(at, 1))} aria-label="Next month">
+              ›
+            </button>
+          </div>
+          <div className="till-cal-dow">
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+              <span key={`${d}-${i}`}>{d}</span>
+            ))}
+          </div>
+          <div className="till-cal-grid">
+            {grid.cells.map((day, i) =>
+              day ? (
+                <button
+                  key={day}
+                  type="button"
+                  className={startOfLocalDay(day) === startOfLocalDay(previewAt) ? "till-cal-day on" : "till-cal-day"}
+                  onClick={() => pickDay(day)}
+                >
+                  {new Date(day).getDate()}
+                </button>
+              ) : (
+                <span key={`e-${i}`} />
+              )
+            )}
+          </div>
+          <label className="till-name till-cal-time">
+            Time
+            <input type="time" step="900" value={time} onChange={(e) => setTime(e.target.value || "18:00")} />
+          </label>
         </div>
         <ZoneChips zones={zones} zoneId={zoneId} onPick={setZoneId} />
-        <div className="till-slots" role="listbox" aria-label="Time">
-          {slots.map((at) => (
-            <button
-              key={at}
-              type="button"
-              className={previewAt === at ? "till-slot on" : "till-slot"}
-              onClick={() => pickSlot(at)}
-            >
-              {formatClock(at)}
-            </button>
-          ))}
-        </div>
         <FloorMap tables={records} state={state} selectedId={tableId} onSelect={pickTable} at={previewAt} preview />
       </main>
       <aside className="till-book-pane">
-        <h2>Who’s coming?</h2>
+        {selectedParty ? (
+          <>
+            <h2>This party</h2>
+            <PartyCard state={state} party={selectedParty} selected />
+            {selectedParty.status === "booked" && selectedParty.id ? (
+              <div className="till-diary-actions">
+                {selectedParty.tableId ? (
+                  <button type="button" className="till-primary" onClick={() => seat(selectedParty.id).then((r) => flash(r, `Seated ${selectedParty.name}`))}>
+                    Seat
+                  </button>
+                ) : (
+                  <select
+                    aria-label={`Hold a table for ${selectedParty.name}`}
+                    defaultValue=""
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (!id) return;
+                      holdTable(selectedParty.id, id).then((r) => flash(r, r.ok ? `Held ${id}` : r.error));
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="">Hold table…</option>
+                    {allTables.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.id}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button type="button" className="till-ghost" onClick={() => noShow(selectedParty.id).then((r) => flash(r, "Marked no show"))}>
+                  No show
+                </button>
+                <button type="button" className="till-ghost" onClick={() => cancelBook(selectedParty.id).then((r) => flash(r, "Cancelled"))}>
+                  Cancel
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <h2>Who’s coming?</h2>
+        )}
         <label className="till-name">
           Name
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sam" />
@@ -128,7 +201,7 @@ export function BookView() {
         </label>
         <p className="till-muted">
           {formatClock(previewAt)}
-          {tableId ? ` · Table ${tableId}` : " · no table yet (waitlist)"}
+          {tableId ? ` · Table ${tableId}` : " · no table yet"}
         </p>
         <button type="button" className="till-primary" onClick={add}>
           Add to the book
@@ -137,52 +210,18 @@ export function BookView() {
           <p className={/^(Booked|Seated|Held|Marked|Cancelled)/.test(notice) ? "till-ok" : "till-error"}>{notice}</p>
         ) : null}
         <ul className="till-diary">
-          {diary.length === 0 ? <li className="till-muted">No names yet. Walk-ins use the floor.</li> : null}
+          {diary.length === 0 ? <li className="till-muted">No names this day. Walk-ins use the floor.</li> : null}
           {diary.map((b) => (
-            <li key={b.id} className={`till-diary-card ${b.status}`}>
-              <div>
-                <strong>
-                  {formatClock(b.at)} · {b.name}
-                </strong>
-                <span>
-                  {b.covers} guests{b.tableId ? ` · Table ${b.tableId}` : " · no table"}
-                  {b.phone ? ` · ${b.phone}` : ""}
-                </span>
-                {b.status !== "booked" ? <em>{b.status === "no-show" ? "No show" : b.status}</em> : null}
-              </div>
-              {b.status === "booked" ? (
-                <div className="till-diary-actions">
-                  {b.tableId ? (
-                    <button type="button" className="till-ghost" onClick={() => seat(b.id).then((r) => flash(r, `Seated ${b.name}`))}>
-                      Seat
-                    </button>
-                  ) : (
-                    <select
-                      aria-label={`Hold a table for ${b.name}`}
-                      defaultValue=""
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        if (!id) return;
-                        holdTable(b.id, id).then((r) => flash(r, r.ok ? `Held ${id}` : r.error));
-                        e.target.value = "";
-                      }}
-                    >
-                      <option value="">Hold table…</option>
-                      {allTables.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.id}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <button type="button" className="till-ghost" onClick={() => noShow(b.id).then((r) => flash(r, "Marked no show"))}>
-                    No show
-                  </button>
-                  <button type="button" className="till-ghost" onClick={() => cancelBook(b.id).then((r) => flash(r, "Cancelled"))}>
-                    Cancel
-                  </button>
-                </div>
-              ) : null}
+            <li key={b.id}>
+              <PartyCard
+                state={state}
+                party={b}
+                selected={pickedId === b.id}
+                onSelect={() => {
+                  setPickedId(b.id);
+                  setTableId(b.tableId);
+                }}
+              />
             </li>
           ))}
         </ul>

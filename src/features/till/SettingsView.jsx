@@ -83,6 +83,7 @@ export function SettingsView() {
     addFloorZone,
     renameFloorZone,
     removeFloorZone,
+    reorderFloorTable,
     addDish,
     patchDish,
     addVenueOffer,
@@ -97,6 +98,7 @@ export function SettingsView() {
   const [newTable, setNewTable] = useState("");
   const [newZone, setNewZone] = useState("");
   const [tableZone, setTableZone] = useState("");
+  const [afterTable, setAfterTable] = useState("");
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("12");
   const [offerName, setOfferName] = useState("");
@@ -198,6 +200,10 @@ export function SettingsView() {
               </select>
               <span className="till-muted">How long a name owns a table in the book. Turn bookings off if this venue is walk-in only.</span>
             </label>
+            <label className="till-setting">
+              <input type="checkbox" checked={venue.useStock !== false} onChange={(e) => setVenueTaxes({ useStock: e.target.checked })} />
+              Count stock
+            </label>
           </section>
           <h2>Guest order</h2>
           <p className="till-muted">
@@ -226,7 +232,7 @@ export function SettingsView() {
       {tab === "floor" ? (
         <>
           <p className="till-muted">
-            Name tables the way they are printed — 1a, 1b, 4, 17. Skip numbers. Split the room into areas if upstairs is a different map.
+            Name tables the way they are printed — 1a, 1b, 4, 17. Drag the map. Use Up/Down so 2a sits next to 2 in the list and on the strip.
           </p>
           {liveZones(venue).length > 1 ? (
             <div className="till-strip">
@@ -299,6 +305,22 @@ export function SettingsView() {
                     if (n && n !== t.seats) moveFloorTable(t.id, { seats: n });
                   }}
                 />
+                <button
+                  type="button"
+                  className="till-ghost"
+                  disabled={venue.tables[0]?.id === t.id}
+                  onClick={() => reorderFloorTable(t.id, venue.tables.findIndex((x) => x.id === t.id) - 1)}
+                >
+                  Up
+                </button>
+                <button
+                  type="button"
+                  className="till-ghost"
+                  disabled={venue.tables.at(-1)?.id === t.id}
+                  onClick={() => reorderFloorTable(t.id, venue.tables.findIndex((x) => x.id === t.id) + 1)}
+                >
+                  Down
+                </button>
                 <button type="button" className="till-ghost" onClick={() => removeFloorTable(t.id).then((r) => flash(r, `Removed ${t.id}`))}>
                   Remove
                 </button>
@@ -318,12 +340,20 @@ export function SettingsView() {
                   ))}
                 </select>
               ) : null}
+              <select value={afterTable} onChange={(e) => setAfterTable(e.target.value)} aria-label="Place after">
+                <option value="">At the end</option>
+                {venue.tables.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    After {t.id}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="till-ghost"
                 onClick={() =>
-                  addFloorTable(newTable, tableZone || liveZones(venue)[0]?.id).then((r) => {
-                    flash(r, r.ok ? `Added ${r.state.venue.tables.at(-1).id}` : r.error);
+                  addFloorTable(newTable, tableZone || liveZones(venue)[0]?.id, afterTable || undefined).then((r) => {
+                    flash(r, r.ok ? `Added ${newTable}` : r.error);
                     if (r.ok) setNewTable("");
                   })
                 }

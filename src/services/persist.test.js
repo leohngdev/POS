@@ -139,6 +139,22 @@ describe("persist", () => {
     expect(loaded.nextBooking).toBe(2);
   });
 
+  it("keeps party name on a seated claim and stock on the shelf", () => {
+    const custom = {
+      ...createInitialState(),
+      guestClaims: { "1a": { at: 9, status: "accepted", name: "Sam", covers: 4, bookingId: "BK-1" } },
+      stock: { countedAt: 1, qty: { soju: 4 }, extra: {} },
+      venue: {
+        ...createInitialState().venue,
+        stockItems: [{ id: "soju", name: "Soju", unit: "bottle", par: 12, category: "Bar" }],
+      },
+    };
+    const loaded = fromSnapshot(toSnapshot(custom), createInitialState());
+    expect(loaded.guestClaims["1a"].name).toBe("Sam");
+    expect(loaded.venue.stockItems[0].name).toBe("Soju");
+    expect(loaded.stock.qty.soju).toBe(4);
+  });
+
   it("keeps default menu when an old snapshot only stored tax flags", () => {
     const raw = {
       schema: 1,

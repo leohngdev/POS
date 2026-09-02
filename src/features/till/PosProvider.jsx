@@ -26,6 +26,7 @@ import {
   removeTable,
   patchTable,
   renameTable,
+  reorderTable,
   addZone,
   renameZone,
   removeZone,
@@ -38,6 +39,13 @@ import {
   cancelBooking,
   markNoShow,
   seatBooking,
+  addStockItem,
+  patchStockItem,
+  removeStockItem,
+  setStockCount,
+  receiveStock,
+  placeStockOrder,
+  receiveOrderLine,
 } from "../../services/pos";
 import { loadState, writeStore, STORAGE_KEY, toSnapshot } from "../../services/persist";
 import { VENUE } from "../../services/venue";
@@ -224,8 +232,8 @@ export function PosProvider({ children }) {
     changeTableCount(count) {
       return withSync((latest) => setTableCount(latest, count));
     },
-    addFloorTable(id, zoneId) {
-      return withSync((latest) => addTable(latest, id, zoneId));
+    addFloorTable(id, zoneId, afterId) {
+      return withSync((latest) => addTable(latest, id, zoneId, afterId));
     },
     removeFloorTable(id) {
       return withSync((latest) => removeTable(latest, id));
@@ -235,6 +243,9 @@ export function PosProvider({ children }) {
     },
     renameFloorTable(id, next) {
       return withSync((latest) => renameTable(latest, id, next));
+    },
+    reorderFloorTable(id, toIndex) {
+      return withSync((latest) => reorderTable(latest, id, toIndex));
     },
     addFloorZone(name) {
       return withSync((latest) => addZone(latest, name));
@@ -286,6 +297,27 @@ export function PosProvider({ children }) {
     },
     noShow(bookingId) {
       return withSync((latest) => markNoShow(latest, bookingId));
+    },
+    addStockLine(draft) {
+      return withSync((latest) => addStockItem(latest, draft));
+    },
+    patchStockLine(id, patch) {
+      return withSync((latest) => patchStockItem(latest, id, patch));
+    },
+    dropStockLine(id) {
+      return withSync((latest) => removeStockItem(latest, id));
+    },
+    countStock(id, qty) {
+      return withSync((latest) => setStockCount(latest, id, qty, Date.now()));
+    },
+    receiveLine(id, qty) {
+      return withSync((latest) => receiveStock(latest, id, qty, Date.now()));
+    },
+    orderStock() {
+      return withSync((latest) => placeStockOrder(latest, Date.now()));
+    },
+    takeOrderLine(orderId, itemId) {
+      return withSync((latest) => receiveOrderLine(latest, orderId, itemId, undefined, Date.now()));
     },
     claim(tableId) {
       return withSync((latest) => claimTable(latest, tableId, tablesOf(latest), Date.now()));

@@ -210,6 +210,19 @@ function normalizeOffer(raw) {
   };
 }
 
+function normalizeStockItem(raw, existing = []) {
+  if (!raw || !String(raw.name ?? "").trim()) return null;
+  const name = String(raw.name).trim();
+  const ids = existing.map((i) => i.id);
+  return {
+    id: String(raw.id || slugId(name, ids)),
+    name,
+    unit: String(raw.unit ?? "each").trim() || "each",
+    par: Math.max(0, Number(raw.par) || 0),
+    category: String(raw.category ?? "").trim(),
+  };
+}
+
 export function defaultVenue() {
   const zones = [DEFAULT_ZONE];
   const tables = VENUE.tables.map((id, i) => layoutTable(id, i, DEFAULT_ZONE.id));
@@ -236,6 +249,8 @@ export function defaultVenue() {
     lockMins: 0,
     useBookings: true,
     bookingMins: 90,
+    useStock: true,
+    stockItems: [],
   };
 }
 
@@ -277,6 +292,13 @@ export function normalizeVenue(raw) {
     unique.push({ ...t, zoneId });
   }
   const offers = Array.isArray(raw.offers) ? raw.offers.map(normalizeOffer).filter(Boolean) : base.offers;
+  const stockItems = Array.isArray(raw.stockItems)
+    ? raw.stockItems
+        .map((i) => normalizeStockItem(i, []))
+        .filter(Boolean)
+        .filter((item, i, all) => all.findIndex((x) => x.id === item.id) === i)
+        .slice(0, 80)
+    : base.stockItems;
   const surchargeByDay =
     Array.isArray(raw.surchargeByDay) && raw.surchargeByDay.length === 7
       ? raw.surchargeByDay.map((n) => clampRate(Number(n), base.surchargeRate))
@@ -300,6 +322,8 @@ export function normalizeVenue(raw) {
     lockMins: [0, 5, 10, 30].includes(Number(raw.lockMins)) ? Number(raw.lockMins) : 0,
     useBookings: raw.useBookings === undefined ? true : Boolean(raw.useBookings),
     bookingMins: BOOKING_MINS.includes(Number(raw.bookingMins)) ? Number(raw.bookingMins) : 90,
+    useStock: raw.useStock === undefined ? true : Boolean(raw.useStock),
+    stockItems,
   };
 }
 
@@ -341,8 +365,11 @@ export function createInitialState() {
     nextChit: 1,
     nextTakeaway: 1,
     nextBooking: 1,
+    nextStockOrder: 1,
     lastBumpedChitId: null,
     guestClaims: {},
+    stock: { countedAt: null, qty: {}, extra: {} },
+    stockOrders: [],
     venue: defaultVenue(),
   };
 }
@@ -366,6 +393,7 @@ export function updateVenueTaxes(state, patch) {
   if (patch.lockMins !== undefined) next.lockMins = patch.lockMins;
   if (patch.useBookings !== undefined) next.useBookings = patch.useBookings;
   if (patch.bookingMins !== undefined) next.bookingMins = patch.bookingMins;
+  if (patch.useStock !== undefined) next.useStock = patch.useStock;
   return updateVenue(state, next);
 }
 
@@ -396,7 +424,7 @@ export function setTableCount(state, count) {
   return { ok: true, error: null, state: updateVenue(state, { tables }) };
 }
 
-export function addTable(state, rawId, zoneId) {
+export function addTable(state, rawId, zoneId, afterId) {
   const id = tableLabel(rawId);
   if (!id) return { ok: false, error: "Name the table the way it is on the floor — 1a, 4, 17.", state };
   const venue = normalizeVenue(state.venue);
@@ -406,7 +434,22 @@ export function addTable(state, rawId, zoneId) {
   }
   if (venue.tables.length >= 40) return { ok: false, error: "Forty tables is the cap.", state };
   const zid = venue.zones.some((z) => z.id === zoneId) ? zoneId : venue.zones[0].id;
-  const tables = [...venue.tables, layoutTable(id, venue.tables.length, zid)];
+  const row = layoutTable(id, venue.tables.length, zid);
+  const tables = [...venue.tables];
+  const after = afterId ? tables.findIndex((t) => t.id === afterId) : -1;
+  if (after >= 0) tables.splice(after + 1, 0, row);
+  else tables.push(row);
+  return { ok: true, error: null, state: updateVenue(state, { tables }) };
+}
+
+export function reorderTable(state, tableId, toIndex) {
+  const venue = normalizeVenue(state.venue);
+  const tables = [...venue.tables];
+  const from = tables.findIndex((t) => t.id === tableId);
+  if (from < 0) return { ok: false, error: "No such table.", state };
+  const [row] = tables.splice(from, 1);
+  const idx = Math.max(0, Math.min(tables.length, Math.floor(Number(toIndex))));
+  tables.splice(idx, 0, row);
   return { ok: true, error: null, state: updateVenue(state, { tables }) };
 }
 
@@ -520,6 +563,137 @@ export function patchOffer(state, offerId, patch) {
   const venue = normalizeVenue(state.venue);
   const offers = venue.offers.map((o) => (o.id === offerId ? normalizeOffer({ ...o, ...patch, id: o.id }) : o)).filter(Boolean);
   return { ok: true, error: null, state: updateVenue(state, { offers }) };
+}
+
+export function addStockItem(state, draft) {
+  const venue = normalizeVenue(state.venue);
+  const item = normalizeStockItem(draft, venue.stockItems);
+  if (!item) return { ok: false, error: "Name what you count — soju, kimchi, napkins.", state };
+  if (venue.stockItems.length >= 80) return { ok: false, error: "Eighty lines is the cap.", state };
+  if (venue.stockItems.some((i) => i.id === item.id)) item.id = `${item.id}-${venue.stockItems.length + 1}`;
+  return { ok: true, error: null, state: updateVenue(state, { stockItems: [...venue.stockItems, item] }) };
+}
+
+export function patchStockItem(state, itemId, patch) {
+  const venue = normalizeVenue(state.venue);
+  if (!venue.stockItems.some((i) => i.id === itemId)) return { ok: false, error: "No such line.", state };
+  const stockItems = venue.stockItems
+    .map((i) => (i.id === itemId ? normalizeStockItem({ ...i, ...patch, id: i.id }, []) : i))
+    .filter(Boolean);
+  return { ok: true, error: null, state: updateVenue(state, { stockItems }) };
+}
+
+export function removeStockItem(state, itemId) {
+  const venue = normalizeVenue(state.venue);
+  const stock = state.stock ?? { qty: {}, extra: {} };
+  const qty = { ...(stock.qty ?? {}) };
+  const extra = { ...(stock.extra ?? {}) };
+  delete qty[itemId];
+  delete extra[itemId];
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...updateVenue(state, { stockItems: venue.stockItems.filter((i) => i.id !== itemId) }),
+      stock: { ...stock, qty, extra },
+    },
+  };
+}
+
+export function stockOnHand(state, itemId) {
+  const stock = state.stock ?? {};
+  return Math.max(0, (Number(stock.qty?.[itemId]) || 0) + (Number(stock.extra?.[itemId]) || 0));
+}
+
+export function setStockCount(state, itemId, qty, now = Date.now()) {
+  const n = Math.max(0, Number(qty) || 0);
+  const stock = state.stock ?? { qty: {}, extra: {} };
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      stock: {
+        countedAt: now,
+        qty: { ...(stock.qty ?? {}), [itemId]: n },
+        extra: { ...(stock.extra ?? {}), [itemId]: 0 },
+      },
+    },
+  };
+}
+
+export function toBuy(state, venue) {
+  return normalizeVenue(venue)
+    .stockItems.map((item) => {
+      const have = stockOnHand(state, item.id);
+      return { ...item, have, need: Math.max(0, roundMoney(item.par - have)) };
+    })
+    .filter((row) => row.need > 0);
+}
+
+export function receiveStock(state, itemId, qty, now = Date.now()) {
+  const add = Math.max(0, Number(qty) || 0);
+  if (!add) return { ok: false, error: "How many came in?", state };
+  const stock = state.stock ?? { qty: {}, extra: {} };
+  const extra = { ...(stock.extra ?? {}) };
+  extra[itemId] = (Number(extra[itemId]) || 0) + add;
+  return {
+    ok: true,
+    error: null,
+    state: { ...state, stock: { countedAt: stock.countedAt ?? now, qty: { ...(stock.qty ?? {}) }, extra } },
+  };
+}
+
+export function placeStockOrder(state, now = Date.now()) {
+  const lines = toBuy(state, state.venue).map((row) => ({
+    itemId: row.id,
+    name: row.name,
+    unit: row.unit,
+    qty: row.need,
+    received: 0,
+  }));
+  if (!lines.length) return { ok: false, error: "Nothing to buy. Count first, or raise a par.", state };
+  const order = { id: nextId("STK", state.nextStockOrder || 1), at: now, status: "open", lines };
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      stockOrders: [...(state.stockOrders ?? []), order],
+      nextStockOrder: (state.nextStockOrder || 1) + 1,
+    },
+  };
+}
+
+export function receiveOrderLine(state, orderId, itemId, qty, now = Date.now()) {
+  const order = (state.stockOrders ?? []).find((o) => o.id === orderId);
+  if (!order || order.status !== "open") return { ok: false, error: "No open order.", state };
+  const line = order.lines.find((l) => l.itemId === itemId);
+  if (!line) return { ok: false, error: "That is not on this order.", state };
+  const add = qty == null ? Math.max(0, line.qty - (line.received || 0)) : Math.max(0, Number(qty) || 0);
+  if (!add) return { ok: false, error: "Already in.", state };
+  const received = receiveStock(state, itemId, add, now);
+  if (!received.ok) return received;
+  const lines = order.lines.map((l) => (l.itemId === itemId ? { ...l, received: (l.received || 0) + add } : l));
+  const done = lines.every((l) => (l.received || 0) >= l.qty);
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...received.state,
+      stockOrders: (received.state.stockOrders ?? []).map((o) =>
+        o.id === orderId ? { ...o, lines, status: done ? "done" : "open" } : o
+      ),
+    },
+  };
+}
+
+export function stockCategories(venue) {
+  const names = [];
+  for (const item of normalizeVenue(venue).stockItems) {
+    if (item.category && !names.includes(item.category)) names.push(item.category);
+  }
+  return names;
 }
 
 function menuIdFromName(name, menu) {
@@ -1028,6 +1202,58 @@ export function defaultBookSlot(now) {
   return start + rounded * 60 * 1000;
 }
 
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+export function dateValue(at) {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+export function timeValue(at) {
+  const d = new Date(at);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+export function fromDateAndTime(dateStr, timeStr) {
+  const [y, m, day] = String(dateStr ?? "")
+    .split("-")
+    .map(Number);
+  const [h, min] = String(timeStr || "18:00")
+    .split(":")
+    .map(Number);
+  if (!y || !m || !day) return null;
+  const at = new Date(y, m - 1, day, h || 0, min || 0, 0, 0).getTime();
+  return Number.isFinite(at) ? at : null;
+}
+
+export function shiftMonth(at, delta) {
+  const d = new Date(startOfLocalDay(at));
+  d.setDate(1);
+  d.setMonth(d.getMonth() + delta);
+  return d.getTime();
+}
+
+export function monthGrid(at) {
+  const d = new Date(startOfLocalDay(at));
+  d.setDate(1);
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const firstDow = d.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDow; i += 1) cells.push(null);
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push(new Date(year, month, day).getTime());
+  }
+  return { year, month, label: d.toLocaleDateString(undefined, { month: "long", year: "numeric" }), cells };
+}
+
+export function formatDay(at) {
+  return new Date(at).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
 function isOpenBooking(b) {
   return b && b.status === "booked";
 }
@@ -1084,6 +1310,52 @@ export function tonightBookings(bookings, at) {
     .filter((b) => b.at >= start && b.at < end && b.status !== "cancelled")
     .slice()
     .sort((a, b) => a.at - b.at || String(a.name).localeCompare(String(b.name)));
+}
+
+export function partyOnTable(state, tableId, at = Date.now()) {
+  if (!tableId) return null;
+  const bookings = state.bookings ?? [];
+  const seated = [...bookings].reverse().find((b) => b.tableId === tableId && b.status === "seated");
+  if (seated) return seated;
+  const claim = state.guestClaims?.[tableId];
+  if (claim?.bookingId) {
+    const linked = bookings.find((b) => b.id === claim.bookingId);
+    if (linked) return linked;
+  }
+  const hold = bookingAtTable(state, tableId, at);
+  if (hold) return hold;
+  if (claim) {
+    return {
+      id: null,
+      name: claim.name || "Walk-in",
+      covers: claim.covers || 0,
+      phone: claim.phone || "",
+      note: "",
+      tableId,
+      at: claim.at,
+      status: guestClaimStatus(claim) === "accepted" ? "seated" : "booked",
+      walkIn: true,
+    };
+  }
+  return null;
+}
+
+export function partyTag(state, party) {
+  if (!party) return null;
+  if (party.status === "no-show") return { label: "No show", kind: "muted" };
+  if (party.status === "cancelled") return { label: "Cancelled", kind: "muted" };
+  if (party.status === "booked") return { label: "Booked", kind: "booked" };
+  const open = party.tableId ? openCheckForTable(state.checks, party.tableId) : null;
+  if (open) {
+    if (open.status === "paid") return { label: "Paid", kind: "paid" };
+    const paid = amountPaid(open) ?? 0;
+    if (paid > 0) return { label: "Part paid", kind: "eating" };
+    return { label: "On the table", kind: "eating" };
+  }
+  const last = party.tableId ? lastPaidCheckForTable(state.checks, party.tableId) : null;
+  if (last && party.status === "seated") return { label: "Paid", kind: "paid" };
+  if (party.status === "seated") return { label: "Here", kind: "here" };
+  return { label: "Booked", kind: "booked" };
 }
 
 function pruneBookings(bookings, now) {

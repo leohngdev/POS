@@ -43,6 +43,15 @@ import {
   addZone,
   addBooking,
   seatBooking,
+  reorderTable,
+  partyOnTable,
+  partyTag,
+  addStockItem,
+  setStockCount,
+  toBuy,
+  receiveStock,
+  placeStockOrder,
+  receiveOrderLine,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -794,5 +803,59 @@ describe("Book", () => {
     expect(closed.state.bookings).toHaveLength(1);
     expect(closed.state.bookings[0].name).toBe("Sam");
     expect(closed.state.guestClaims).toEqual({});
+  });
+
+  it("still finds Sam on the table after Seat", () => {
+    const withTable = addTable(createInitialState(), "1a");
+    const named = addBooking(withTable.state, { name: "Sam", covers: 4, phone: "0400", tableId: "1a", at: six });
+    const seated = seatBooking(named.state, named.state.bookings[0].id, six);
+    const party = partyOnTable(seated.state, "1a", six);
+    expect(party.name).toBe("Sam");
+    expect(party.phone).toBe("0400");
+    expect(partyTag(seated.state, party).label).toBe("Here");
+    const sent = send({
+      state: seated.state,
+      venue: seated.state.venue,
+      channel: "dine-in",
+      tableId: "1a",
+      lines,
+      now: six,
+    });
+    expect(partyTag(sent.state, partyOnTable(sent.state, "1a")).label).toBe("On the table");
+    const paid = payCheck(sent.state, sent.state.checks[0].id, "card");
+    expect(partyTag(paid.state, partyOnTable(paid.state, "1a")).label).toBe("Paid");
+  });
+});
+
+describe("Table order", () => {
+  it("inserts 2a after 02 and can move it next to 02 in the list", () => {
+    const added = addTable(createInitialState(), "2a", undefined, "02");
+    const ids = liveTables(added.state.venue);
+    expect(ids[ids.indexOf("02") + 1]).toBe("2a");
+    const moved = reorderTable(added.state, "2a", 0);
+    expect(liveTables(moved.state.venue)[0]).toBe("2a");
+  });
+});
+
+describe("Stock", () => {
+  it("counts soju, shows what to buy, and receiving fills the shelf", () => {
+    const added = addStockItem(createInitialState(), { name: "Soju", unit: "bottle", par: 12, category: "Bar" });
+    expect(added.ok).toBe(true);
+    const counted = setStockCount(added.state, added.state.venue.stockItems[0].id, 4, 1);
+    const buy = toBuy(counted.state, counted.state.venue);
+    expect(buy[0].need).toBe(8);
+    const inDoor = receiveStock(counted.state, added.state.venue.stockItems[0].id, 8, 2);
+    expect(toBuy(inDoor.state, inDoor.state.venue)).toHaveLength(0);
+  });
+
+  it("saves an order and ticks a line in", () => {
+    const added = addStockItem(createInitialState(), { name: "Kimchi", unit: "tub", par: 6 });
+    const id = added.state.venue.stockItems[0].id;
+    const counted = setStockCount(added.state, id, 1, 1);
+    const ordered = placeStockOrder(counted.state, 2);
+    expect(ordered.state.stockOrders[0].lines[0].qty).toBe(5);
+    const got = receiveOrderLine(ordered.state, ordered.state.stockOrders[0].id, id, undefined, 3);
+    expect(got.state.stockOrders[0].status).toBe("done");
+    expect(toBuy(got.state, got.state.venue)).toHaveLength(0);
   });
 });

@@ -10,6 +10,7 @@ import {
   openCheckForTable,
   tableClaimStatus,
   tableFloorStatus,
+  partyOnTable,
   tablesInZone,
 } from "../../services/pos";
 import { usePos } from "./PosProvider";
@@ -20,6 +21,7 @@ import { TableOps } from "./TableOps";
 import { FloorMap } from "./FloorMap";
 import { OfferPad } from "./OfferPad";
 import { printReceipt } from "./Receipt";
+import { PartyCard } from "./PartyCard";
 
 function bumpQty(map, id, delta) {
   const next = { ...map, [id]: Math.max(0, (map[id] ?? 0) + delta) };
@@ -69,6 +71,7 @@ export function DineInView() {
   const selectedClaim = tableId ? tableClaimStatus(state, tableId) : null;
   const targets = tableId ? moveTargets(state, ids, tableId) : [];
   const guestsValue = openCheck ? openCheck.covers ?? 0 : draftGuests;
+  const party = tableId ? partyOnTable(state, tableId) : null;
 
   function chooseTable(id) {
     setTableId(id);
@@ -240,6 +243,7 @@ export function DineInView() {
         primaryDisabled={!tableId || lines.length === 0}
         onPrimary={tableId ? send : undefined}
       >
+        {party ? <PartyCard state={state} party={party} selected /> : null}
         {ordering ? (
           <div className="till-check-meta">
             <label className="till-name">

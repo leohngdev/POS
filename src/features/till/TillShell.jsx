@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DineInView } from "./DineInView";
 import { BookView } from "./BookView";
+import { StockView } from "./StockView";
 import { TakeawayView } from "./TakeawayView";
 import { TicketsView } from "./TicketsView";
 import { KitchenView } from "./KitchenView";
@@ -15,6 +16,7 @@ const NAV = [
   { id: "takeaway", label: "Takeaway" },
   { id: "tickets", label: "Tickets" },
   { id: "kitchen", label: "Kitchen" },
+  { id: "stock", label: "Stock" },
   { id: "history", label: "History" },
   { id: "settings", label: "Settings" },
 ];
@@ -23,7 +25,11 @@ export function TillShell() {
   const [nav, setNav] = useState("dine-in");
   const { lock, syncStatus, state, venue } = usePos();
   const guestWaiting = hasPendingGuestClaims(state);
-  const items = venue.useBookings === false ? NAV.filter((item) => item.id !== "book") : NAV;
+  const items = NAV.filter((item) => {
+    if (item.id === "book" && venue.useBookings === false) return false;
+    if (item.id === "stock" && venue.useStock === false) return false;
+    return true;
+  });
   const current = items.some((item) => item.id === nav) ? nav : "dine-in";
   const wide = current === "kitchen" || current === "settings";
 
@@ -53,6 +59,7 @@ export function TillShell() {
       {current === "takeaway" ? <TakeawayView /> : null}
       {current === "tickets" ? <TicketsView /> : null}
       {current === "kitchen" ? <KitchenView /> : null}
+      {current === "stock" ? <StockView /> : null}
       {current === "history" ? <HistoryView /> : null}
       {current === "settings" ? <SettingsView /> : null}
     </div>
