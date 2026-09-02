@@ -15,7 +15,7 @@ Follow `core/languages/javascript.md` from the starters catalog (copy or keep ne
 | Path | Role |
 |---|---|
 | `src/app/` | PIN gate + till composition |
-| `src/features/till/` | Dine in, Book, Takeaway, Tickets, Kitchen, Stock, History, Settings |
+| `src/features/till/` | Dine in, Book, Takeaway, Tickets, Kitchen, Stock, Roster, History, Settings |
 | `src/services/` | Check/chit domain (`pos.js`), persist, live venue config, venue snapshot, `npm start` host; guest claims pending vs accepted |
 | `src/shared/ui/` | Reusable UI primitives |
 | `src/styles/` | Tokens and global CSS |

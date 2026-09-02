@@ -167,7 +167,7 @@ export function SettingsView() {
               <button type="button" className="till-ghost till-copy" disabled={pin.length < 4} onClick={() => changePin(pin).then((r) => { flash(r, "Saved PIN"); if (r.ok) setPin(""); })}>
                 Save PIN
               </button>
-              <span className="till-muted">A till PIN is a door code, not a login. Staff names come with rostering later. Lock the till when you walk away — or auto-lock below.</span>
+              <span className="till-muted">A till PIN is a door code, not a login. Named staff get their own PIN on Roster. Lock when you walk away — or auto-lock below.</span>
             </label>
             <label className="till-setting">
               Auto-lock
@@ -204,6 +204,11 @@ export function SettingsView() {
               <input type="checkbox" checked={venue.useStock !== false} onChange={(e) => setVenueTaxes({ useStock: e.target.checked })} />
               Count stock
             </label>
+            <label className="till-setting">
+              <input type="checkbox" checked={venue.useRoster !== false} onChange={(e) => setVenueTaxes({ useRoster: e.target.checked })} />
+              Use roster
+            </label>
+            <span className="till-muted">Turn roster off if this till is just a door code. Names, the week grid, and clock-in leave the nav.</span>
           </section>
           <h2>Guest order</h2>
           <p className="till-muted">

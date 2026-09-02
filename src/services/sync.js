@@ -36,7 +36,7 @@ export async function pushSnapshot(rev, snapshot, fetcher = fetch) {
 export function sessionize(snapshot, session) {
   const loaded = fromSnapshot(snapshot, createInitialState());
   const base = loaded ?? createInitialState();
-  return { ...base, unlocked: session.unlocked, pinError: session.pinError };
+  return { ...base, unlocked: session.unlocked, pinError: session.pinError, onStaff: session.onStaff ?? null };
 }
 
 export function hasLocalService(state) {

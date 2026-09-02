@@ -23,6 +23,10 @@ function snapshotVenue(venue) {
   if (venue.bookingMins != null) next.bookingMins = venue.bookingMins;
   if (venue.useStock != null) next.useStock = venue.useStock;
   if (Array.isArray(venue.stockItems)) next.stockItems = venue.stockItems;
+  if (Array.isArray(venue.stockGroups)) next.stockGroups = venue.stockGroups;
+  if (venue.useRoster != null) next.useRoster = venue.useRoster;
+  if (Array.isArray(venue.staff)) next.staff = venue.staff;
+  if (Array.isArray(venue.services)) next.services = venue.services;
   return next;
 }
 
@@ -59,6 +63,8 @@ export function toSnapshot(state) {
     nextStockOrder: Number(state.nextStockOrder) || 1,
     stock: state.stock ?? { countedAt: null, qty: {}, extra: {} },
     stockOrders: Array.isArray(state.stockOrders) ? state.stockOrders : [],
+    shifts: Array.isArray(state.shifts) ? state.shifts : [],
+    clocks: Array.isArray(state.clocks) ? state.clocks : [],
     venue: snapshotVenue(state.venue),
   };
 }
@@ -84,6 +90,8 @@ export function fromSnapshot(raw, baseState) {
     nextStockOrder: Number(raw.nextStockOrder) || 1,
     stock: raw.stock && typeof raw.stock === "object" ? raw.stock : { countedAt: null, qty: {}, extra: {} },
     stockOrders: Array.isArray(raw.stockOrders) ? raw.stockOrders : [],
+    shifts: Array.isArray(raw.shifts) ? raw.shifts : [],
+    clocks: Array.isArray(raw.clocks) ? raw.clocks : [],
     venue: { ...baseState.venue, ...raw.venue },
   };
 }

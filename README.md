@@ -26,7 +26,7 @@ npm run build
 ## Folders
 
 - `src/app` — PIN gate composition
-- `src/features/till` — Dine in, Takeaway, Tickets, Kitchen
+- `src/features/till` — Dine in, Book, Takeaway, Tickets, Kitchen, Stock, Roster
 - `src/services` — check/chit rules (`pos.js`)
 - `src/shared/ui` — reusable presentational pieces
 - `src/styles` — tokens + global styles

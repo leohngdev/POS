@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInitialState, send, compactLines, claimTable } from "./pos";
+import { addStaff, clockIn, createInitialState, send, compactLines, claimTable } from "./pos";
 import { VENUE } from "./venue";
 import { fromSnapshot, loadState, toSnapshot, writeStore, STORAGE_KEY } from "./persist";
 
@@ -171,5 +171,24 @@ describe("persist", () => {
     expect(loaded.venue.gstEnabled).toBe(true);
     expect(loaded.venue.menu[0].id).toBe("wagyu");
     expect(loaded.venue.pin).toBe("1234");
+  });
+
+  it("keeps the week and clocks, not who is on this till", () => {
+    const maya = addStaff(createInitialState(), { name: "Maya", pin: "2222" });
+    const id = maya.state.venue.staff[0].id;
+    const inNow = clockIn(
+      { ...maya.state, shifts: [{ staffId: id, day: 5, serviceId: "dinner" }] },
+      maya.state.venue.staff[0],
+      10
+    );
+    const snap = toSnapshot(inNow.state);
+    expect(snap.onStaff).toBeUndefined();
+    expect(snap.shifts).toEqual([{ staffId: id, day: 5, serviceId: "dinner" }]);
+    expect(snap.clocks[0].staffId).toBe(id);
+    expect(snap.venue.staff[0].name).toBe("Maya");
+    const loaded = fromSnapshot(snap, createInitialState());
+    expect(loaded.onStaff).toBeNull();
+    expect(loaded.shifts[0].day).toBe(5);
+    expect(loaded.clocks[0].inAt).toBe(10);
   });
 });

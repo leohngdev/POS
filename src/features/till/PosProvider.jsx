@@ -46,9 +46,18 @@ import {
   receiveStock,
   placeStockOrder,
   receiveOrderLine,
+  matchUnlock,
+  clockIn,
+  clockOut,
+  addStaff,
+  removeStaff,
+  addService,
+  removeService,
+  toggleShift,
+  addStockGroup,
+  removeStockGroup,
 } from "../../services/pos";
 import { loadState, writeStore, STORAGE_KEY, toSnapshot } from "../../services/persist";
-import { VENUE } from "../../services/venue";
 import { applyOnVenue, hasLocalService, POLL_MS, pullSnapshot, pushSnapshot, sessionize } from "../../services/sync";
 
 const PosContext = createContext(null);
@@ -60,7 +69,7 @@ function reducer(state, action) {
     case "replace":
       return action.state;
     case "hydrate-remote":
-      return { ...action.state, unlocked: state.unlocked, pinError: state.pinError };
+      return { ...action.state, unlocked: state.unlocked, pinError: state.pinError, onStaff: state.onStaff ?? action.state.onStaff ?? null };
     default:
       return state;
   }
@@ -74,7 +83,7 @@ function boot() {
 function fromStore(session) {
   if (typeof localStorage === "undefined") return session;
   const loaded = loadState(createInitialState(), localStorage);
-  return { ...loaded, unlocked: session.unlocked, pinError: session.pinError };
+  return { ...loaded, unlocked: session.unlocked, pinError: session.pinError, onStaff: session.onStaff ?? null };
 }
 
 function tablesOf(state) {
@@ -147,7 +156,16 @@ export function PosProvider({ children }) {
     function arm() {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        dispatch({ type: "replace", state: { ...fromStore(state), unlocked: false, pinError: null } });
+        const next = { ...clockOut(fromStore(state), Date.now()).state, unlocked: false, pinError: null };
+        dispatch({ type: "replace", state: next });
+        mutatingRef.current = true;
+        pushSnapshot(revRef.current, toSnapshot(next))
+          .then((pushed) => {
+            if (pushed.ok) revRef.current = pushed.rev;
+          })
+          .finally(() => {
+            mutatingRef.current = false;
+          });
       }, mins * 60 * 1000);
     }
     arm();
@@ -180,7 +198,7 @@ export function PosProvider({ children }) {
     state,
     venue,
     syncStatus,
-    unlock(pin) {
+    unlock(pin, staffId) {
       mutatingRef.current = true;
       pullSnapshot()
         .then((pulled) => {
@@ -194,19 +212,36 @@ export function PosProvider({ children }) {
           } else {
             setSyncStatus("local");
           }
-          const livePin = base.venue?.pin ?? VENUE.pin;
-          if (pin !== livePin) {
+          const who = matchUnlock(pin, base.venue, staffId);
+          if (!who) {
             dispatch({ type: "unlock-fail" });
             return;
           }
-          dispatch({ type: "replace", state: { ...base, unlocked: true, pinError: null } });
+          const clocked = clockIn(base, who, Date.now());
+          const next = { ...clocked.state, unlocked: true, pinError: null };
+          dispatch({ type: "replace", state: next });
+          if (pulled.ok) {
+            return pushSnapshot(revRef.current, toSnapshot(next)).then((pushed) => {
+              if (pushed.ok) revRef.current = pushed.rev;
+            });
+          }
+          return undefined;
         })
         .finally(() => {
           mutatingRef.current = false;
         });
     },
     lock() {
-      dispatch({ type: "replace", state: { ...fromStore(state), unlocked: false, pinError: null } });
+      const next = { ...clockOut(state, Date.now()).state, unlocked: false, pinError: null };
+      dispatch({ type: "replace", state: next });
+      mutatingRef.current = true;
+      pushSnapshot(revRef.current, toSnapshot(next))
+        .then((pushed) => {
+          if (pushed.ok) revRef.current = pushed.rev;
+        })
+        .finally(() => {
+          mutatingRef.current = false;
+        });
     },
     sendOrder(payload) {
       return withSync((latest) => send({ state: latest, venue: normalizeVenue(latest.venue), now: Date.now(), ...payload }));
@@ -318,6 +353,27 @@ export function PosProvider({ children }) {
     },
     takeOrderLine(orderId, itemId) {
       return withSync((latest) => receiveOrderLine(latest, orderId, itemId, undefined, Date.now()));
+    },
+    addPerson(draft) {
+      return withSync((latest) => addStaff(latest, draft));
+    },
+    dropPerson(id) {
+      return withSync((latest) => removeStaff(latest, id));
+    },
+    addMeal(name) {
+      return withSync((latest) => addService(latest, name));
+    },
+    dropMeal(id) {
+      return withSync((latest) => removeService(latest, id));
+    },
+    flipShift(staffId, day, serviceId) {
+      return withSync((latest) => toggleShift(latest, staffId, day, serviceId));
+    },
+    addShelf(name) {
+      return withSync((latest) => addStockGroup(latest, name));
+    },
+    dropShelf(id) {
+      return withSync((latest) => removeStockGroup(latest, id));
     },
     claim(tableId) {
       return withSync((latest) => claimTable(latest, tableId, tablesOf(latest), Date.now()));

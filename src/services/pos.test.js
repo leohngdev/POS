@@ -52,6 +52,15 @@ import {
   receiveStock,
   placeStockOrder,
   receiveOrderLine,
+  addStockGroup,
+  removeStockGroup,
+  stockCategories,
+  addStaff,
+  matchUnlock,
+  toggleShift,
+  rosterOn,
+  clockIn,
+  clockOut,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -857,5 +866,44 @@ describe("Stock", () => {
     const got = receiveOrderLine(ordered.state, ordered.state.stockOrders[0].id, id, undefined, 3);
     expect(got.state.stockOrders[0].status).toBe("done");
     expect(toBuy(got.state, got.state.venue)).toHaveLength(0);
+  });
+
+  it("turns a category into a shelf and unfiles items when that shelf is removed", () => {
+    const added = addStockItem(createInitialState(), { name: "Soju", unit: "bottle", par: 12, category: "Bar" });
+    expect(stockCategories(added.state.venue)).toEqual(["Bar"]);
+    const fridge = addStockGroup(added.state, "Fridge");
+    expect(stockCategories(fridge.state.venue)).toEqual(["Bar", "Fridge"]);
+    const barId = fridge.state.venue.stockGroups.find((g) => g.name === "Bar").id;
+    const gone = removeStockGroup(fridge.state, barId);
+    expect(gone.state.venue.stockItems[0].category).toBe("");
+    expect(stockCategories(gone.state.venue)).toEqual(["Fridge"]);
+  });
+});
+
+describe("Roster", () => {
+  it("unlocks a named PIN, not the till door, and toggles a dinner shift", () => {
+    const maya = addStaff(createInitialState(), { name: "Maya", pin: "2222", role: "floor" });
+    expect(maya.ok).toBe(true);
+    const id = maya.state.venue.staff[0].id;
+    expect(matchUnlock("2222", maya.state.venue, id).name).toBe("Maya");
+    expect(matchUnlock("1234", maya.state.venue, "till").id).toBe("till");
+    expect(matchUnlock("2222", maya.state.venue, "till")).toBeNull();
+    expect(verifyPin("1234", maya.state.venue)).toBe(true);
+    expect(addStaff(maya.state, { name: "Jo", pin: "1234" }).ok).toBe(false);
+    expect(setPin(maya.state, "2222").ok).toBe(false);
+    const on = toggleShift(maya.state, id, 3, "dinner");
+    expect(rosterOn(on.state, 3, "dinner")[0].name).toBe("Maya");
+    const off = toggleShift(on.state, id, 3, "dinner");
+    expect(rosterOn(off.state, 3, "dinner")).toHaveLength(0);
+  });
+
+  it("clocks in on unlock and out on lock", () => {
+    const who = { id: "maya", name: "Maya", role: "floor" };
+    const inNow = clockIn(createInitialState(), who, 10);
+    expect(inNow.state.onStaff.name).toBe("Maya");
+    expect(inNow.state.clocks[0].inAt).toBe(10);
+    const out = clockOut(inNow.state, 20);
+    expect(out.state.onStaff).toBeNull();
+    expect(out.state.clocks[0].outAt).toBe(20);
   });
 });

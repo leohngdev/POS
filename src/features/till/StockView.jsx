@@ -1,29 +1,75 @@
 import { useState } from "react";
-import { stockCategories, stockOnHand, toBuy } from "../../services/pos";
+import { stockCategories, stockGrouped, stockOnHand, toBuy } from "../../services/pos";
 import { usePos } from "./PosProvider";
+
+function StockRow({ item, have, onCount, onRemove }) {
+  const need = Math.max(0, item.par - have);
+  return (
+    <li className="till-stock-row">
+      <div>
+        <strong>{item.name}</strong>
+        <span>
+          {have} {item.unit} on hand
+          {item.par > 0 ? ` · par ${item.par}` : ""}
+          {need > 0 ? ` · buy ${need}` : ""}
+        </span>
+      </div>
+      <div className="till-stock-step">
+        <button type="button" className="till-ghost" onClick={() => onCount(Math.max(0, have - 1))} aria-label={`Less ${item.name}`}>
+          −
+        </button>
+        <input
+          type="number"
+          min="0"
+          step="0.5"
+          defaultValue={have}
+          key={`${item.id}-${have}`}
+          aria-label={`${item.name} on hand`}
+          onBlur={(e) => {
+            const n = Number(e.target.value);
+            if (!Number.isNaN(n) && n !== have) onCount(n);
+          }}
+        />
+        <button type="button" className="till-ghost" onClick={() => onCount(have + 1)} aria-label={`More ${item.name}`}>
+          +
+        </button>
+        <button type="button" className="till-ghost" onClick={onRemove}>
+          Remove
+        </button>
+      </div>
+    </li>
+  );
+}
 
 export function StockView() {
   const {
     state,
     venue,
     addStockLine,
-    patchStockLine,
     dropStockLine,
     countStock,
     receiveLine,
     orderStock,
     takeOrderLine,
+    addShelf,
+    dropShelf,
   } = usePos();
-  const [category, setCategory] = useState("all");
+  const [filter, setFilter] = useState(null);
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("bottle");
   const [par, setPar] = useState("12");
   const [cat, setCat] = useState("");
+  const [shelf, setShelf] = useState("");
   const [notice, setNotice] = useState(null);
-  const items = (venue.stockItems ?? []).filter((i) => category === "all" || i.category === category);
+  const groups = venue.stockGroups ?? [];
   const cats = stockCategories(venue);
+  const active = filter && (filter === "all" || cats.includes(filter)) ? filter : cats[0] ?? "all";
+  const allItems = venue.stockItems ?? [];
+  const items = active === "all" ? allItems : allItems.filter((i) => i.category === active);
+  const sections = active === "all" ? stockGrouped(items) : [{ name: null, items }];
   const buy = toBuy(state, venue);
   const openOrder = [...(state.stockOrders ?? [])].reverse().find((o) => o.status === "open") ?? null;
+  const addCat = cat || (active !== "all" ? active : "");
 
   function flash(result, okText) {
     if (!result.ok) {
@@ -38,89 +84,105 @@ export function StockView() {
       <main className="till-workspace">
         <h1>Stock</h1>
         <p className="till-muted">
-          Count what is on the shelf. Par is what you want to have. Buy is the gap. Turn this off in Settings if this venue does not count.
+          Count one shelf at a time. Par is what you want. Buy is the gap. Turn this off in Settings if this venue does not count.
         </p>
-        {cats.length ? (
-          <div className="till-strip">
-            <button type="button" className={category === "all" ? "till-table till-table-sm on" : "till-table till-table-sm"} onClick={() => setCategory("all")}>
+        <div className="till-strip">
+          {cats.length ? (
+            <button type="button" className={active === "all" ? "till-table till-table-sm on" : "till-table till-table-sm"} onClick={() => setFilter("all")}>
               All
             </button>
-            {cats.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className={category === c ? "till-table till-table-sm on" : "till-table till-table-sm"}
-                onClick={() => setCategory(c)}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
+          ) : null}
+        {groups.map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            className={active === g.name ? "till-table till-table-sm on" : "till-table till-table-sm"}
+            onClick={() => setFilter(g.name)}
+          >
+            {g.name}
+          </button>
+        ))}
+        </div>
+        {active !== "all" && groups.some((g) => g.name === active) ? (
+          <button
+            type="button"
+            className="till-ghost till-stock-unfile"
+            onClick={() => {
+              const group = groups.find((g) => g.name === active);
+              if (!group) return;
+              dropShelf(group.id).then((r) => {
+                flash(r, "Shelf gone");
+                if (r.ok) setFilter(null);
+              });
+            }}
+          >
+            Remove {active} shelf
+          </button>
         ) : null}
+        <div className="till-offer-add">
+          <input placeholder="Bar, Fridge, Dry" value={shelf} onChange={(e) => setShelf(e.target.value)} />
+          <button
+            type="button"
+            className="till-ghost"
+            onClick={() =>
+              addShelf(shelf).then((r) => {
+                flash(r, "Shelf added");
+                if (r.ok) {
+                  setFilter(shelf.trim());
+                  setShelf("");
+                }
+              })
+            }
+          >
+            Add shelf
+          </button>
+        </div>
         {items.length === 0 ? (
-          <p className="till-empty">Nothing to count yet. Add soju, kimchi, napkins — whatever this kitchen actually tracks.</p>
+          <p className="till-empty">
+            {active === "all"
+              ? "Nothing to count yet. Add soju, kimchi, napkins — whatever this kitchen actually tracks."
+              : `Nothing on ${active} yet. Add a line, or pick another shelf.`}
+          </p>
         ) : (
-          <ul className="till-stock-list">
-            {items.map((item) => {
-              const have = stockOnHand(state, item.id);
-              const need = Math.max(0, item.par - have);
-              return (
-                <li key={item.id} className="till-stock-row">
-                  <div>
-                    <strong>{item.name}</strong>
-                    <span>
-                      {have} {item.unit} on hand
-                      {item.par > 0 ? ` · par ${item.par}` : ""}
-                      {need > 0 ? ` · buy ${need}` : ""}
-                    </span>
-                  </div>
-                  <div className="till-stock-step">
-                    <button type="button" className="till-ghost" onClick={() => countStock(item.id, Math.max(0, have - 1))} aria-label={`Less ${item.name}`}>
-                      −
-                    </button>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      defaultValue={have}
-                      key={`${item.id}-${have}`}
-                      aria-label={`${item.name} on hand`}
-                      onBlur={(e) => {
-                        const n = Number(e.target.value);
-                        if (!Number.isNaN(n) && n !== have) countStock(item.id, n);
-                      }}
-                    />
-                    <button type="button" className="till-ghost" onClick={() => countStock(item.id, have + 1)} aria-label={`More ${item.name}`}>
-                      +
-                    </button>
-                    <button
-                      type="button"
-                      className="till-ghost"
-                      onClick={() => dropStockLine(item.id).then((r) => flash(r, "Removed"))}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          sections.map((section) => (
+            <div key={section.name ?? "list"} className="till-stock-section">
+              {section.name ? <h2>{section.name}</h2> : null}
+              <ul className="till-stock-list">
+                {section.items.map((item) => (
+                  <StockRow
+                    key={item.id}
+                    item={item}
+                    have={stockOnHand(state, item.id)}
+                    onCount={(qty) => countStock(item.id, qty)}
+                    onRemove={() => dropStockLine(item.id).then((r) => flash(r, "Removed"))}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))
         )}
         <h2>Add a line</h2>
         <div className="till-offer-add">
           <input placeholder="Soju" value={name} onChange={(e) => setName(e.target.value)} />
           <input placeholder="bottle" value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="Unit" />
           <input type="number" min="0" step="0.5" value={par} onChange={(e) => setPar(e.target.value)} aria-label="Par" />
-          <input placeholder="Bar (optional)" value={cat} onChange={(e) => setCat(e.target.value)} />
+          <select aria-label="Shelf" value={addCat} onChange={(e) => setCat(e.target.value)}>
+            <option value="">Unfiled</option>
+            {cats.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             className="till-ghost"
             onClick={() =>
-              addStockLine({ name, unit, par: Number(par), category: cat }).then((r) => {
+              addStockLine({ name, unit, par: Number(par), category: addCat }).then((r) => {
                 flash(r, "Added");
                 if (r.ok) {
                   setName("");
-                  setCat("");
+                  if (addCat) setFilter(addCat);
                 }
               })
             }
@@ -129,7 +191,7 @@ export function StockView() {
           </button>
         </div>
         {notice ? (
-          <p className={/^(Added|Removed|Order|In)/.test(notice) ? "till-ok" : "till-error"}>{notice}</p>
+          <p className={/^(Added|Removed|Order|In|Shelf)/.test(notice) ? "till-ok" : "till-error"}>{notice}</p>
         ) : null}
       </main>
       <aside className="till-book-pane">
@@ -146,6 +208,7 @@ export function StockView() {
                   </strong>
                   <span>
                     Have {row.have} · par {row.par}
+                    {row.category ? ` · ${row.category}` : ""}
                   </span>
                 </div>
                 <button type="button" className="till-ghost" onClick={() => receiveLine(row.id, row.need).then((r) => flash(r, "In"))}>

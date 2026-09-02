@@ -101,49 +101,55 @@ export function BookView() {
 
   return (
     <>
-      <main className="till-workspace">
-        <h1>Book</h1>
-        <p className="till-muted">
-          {formatDay(previewAt)} · {formatClock(previewAt)}. Hold is {venue.bookingMins} minutes. Walk-ins still use Dine in.
-        </p>
-        <div className="till-cal">
-          <div className="till-cal-head">
-            <button type="button" className="till-ghost" onClick={() => setAt(shiftMonth(at, -1))} aria-label="Previous month">
-              ‹
-            </button>
-            <strong>{grid.label}</strong>
-            <button type="button" className="till-ghost" onClick={() => setAt(shiftMonth(at, 1))} aria-label="Next month">
-              ›
-            </button>
-          </div>
-          <div className="till-cal-dow">
-            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-              <span key={`${d}-${i}`}>{d}</span>
-            ))}
-          </div>
-          <div className="till-cal-grid">
-            {grid.cells.map((day, i) =>
-              day ? (
-                <button
-                  key={day}
-                  type="button"
-                  className={startOfLocalDay(day) === startOfLocalDay(previewAt) ? "till-cal-day on" : "till-cal-day"}
-                  onClick={() => pickDay(day)}
-                >
-                  {new Date(day).getDate()}
-                </button>
-              ) : (
-                <span key={`e-${i}`} />
-              )
-            )}
-          </div>
-          <label className="till-name till-cal-time">
-            Time
-            <input type="time" step="900" value={time} onChange={(e) => setTime(e.target.value || "18:00")} />
-          </label>
+      <main className="till-workspace till-book">
+        <div className="till-book-head">
+          <h1>Book</h1>
+          <p className="till-muted">
+            {formatDay(previewAt)} · {formatClock(previewAt)} · hold {venue.bookingMins}m
+          </p>
         </div>
-        <ZoneChips zones={zones} zoneId={zoneId} onPick={setZoneId} />
-        <FloorMap tables={records} state={state} selectedId={tableId} onSelect={pickTable} at={previewAt} preview />
+        <div className="till-book-stage">
+          <div className="till-cal">
+            <div className="till-cal-head">
+              <button type="button" className="till-ghost" onClick={() => setAt(shiftMonth(at, -1))} aria-label="Previous month">
+                ‹
+              </button>
+              <strong>{grid.label}</strong>
+              <button type="button" className="till-ghost" onClick={() => setAt(shiftMonth(at, 1))} aria-label="Next month">
+                ›
+              </button>
+            </div>
+            <div className="till-cal-dow">
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                <span key={`${d}-${i}`}>{d}</span>
+              ))}
+            </div>
+            <div className="till-cal-grid">
+              {grid.cells.map((day, i) =>
+                day ? (
+                  <button
+                    key={day}
+                    type="button"
+                    className={startOfLocalDay(day) === startOfLocalDay(previewAt) ? "till-cal-day on" : "till-cal-day"}
+                    onClick={() => pickDay(day)}
+                  >
+                    {new Date(day).getDate()}
+                  </button>
+                ) : (
+                  <span key={`e-${i}`} />
+                )
+              )}
+            </div>
+            <label className="till-name till-cal-time">
+              Time
+              <input type="time" step="900" value={time} onChange={(e) => setTime(e.target.value || "18:00")} />
+            </label>
+          </div>
+          <div className="till-book-floor">
+            <ZoneChips zones={zones} zoneId={zoneId} onPick={setZoneId} />
+            <FloorMap tables={records} state={state} selectedId={tableId} onSelect={pickTable} at={previewAt} preview />
+          </div>
+        </div>
       </main>
       <aside className="till-book-pane">
         {selectedParty ? (
@@ -187,18 +193,20 @@ export function BookView() {
         ) : (
           <h2>Who’s coming?</h2>
         )}
-        <label className="till-name">
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sam" />
-        </label>
-        <label className="till-name">
-          Guests
-          <input type="number" min="1" max="99" value={covers} onChange={(e) => setCovers(e.target.value)} />
-        </label>
-        <label className="till-name">
-          Phone
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
-        </label>
+        <div className="till-book-add">
+          <label className="till-name till-book-add-wide">
+            Name
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sam" />
+          </label>
+          <label className="till-name">
+            Guests
+            <input type="number" min="1" max="99" value={covers} onChange={(e) => setCovers(e.target.value)} />
+          </label>
+          <label className="till-name till-book-add-wide">
+            Phone
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
+          </label>
+        </div>
         <p className="till-muted">
           {formatClock(previewAt)}
           {tableId ? ` · Table ${tableId}` : " · no table yet"}

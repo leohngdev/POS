@@ -36,6 +36,25 @@
   text-align: center;
 }
 
+.till-gate-box h1 {
+  margin-bottom: var(--space-3);
+}
+
+.till-who {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: var(--space-4) 0;
+}
+
+.till-who .till-table {
+  width: auto;
+  min-width: 88px;
+  height: 56px;
+  padding: 0 16px;
+}
+
 .till-eyebrow {
   margin: 0 0 var(--space-2);
   font-size: 11px;
@@ -118,9 +137,15 @@
 }
 
 .till-lock {
-  margin-top: auto;
+  margin-top: 8px;
   margin-left: 0;
   width: 100%;
+}
+
+.till-on {
+  margin: auto 0 0;
+  font-size: 12px;
+  color: var(--color-muted);
 }
 
 .till-nav {
@@ -895,8 +920,51 @@
 }
 
 .till-cal {
-  max-width: 360px;
-  margin-bottom: var(--space-4);
+  margin: 0;
+}
+
+.till-book-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.till-book-head h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.till-book-head .till-muted {
+  margin: 0;
+}
+
+.till-book-stage {
+  display: grid;
+  grid-template-columns: minmax(196px, 228px) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.till-book-floor .till-strip {
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+.till-book-floor .till-floor {
+  margin-bottom: 0;
+}
+
+.till-book-add {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  gap: 8px;
+}
+
+.till-book-add-wide {
+  grid-column: 1 / -1;
 }
 
 .till-cal-head {
@@ -911,7 +979,7 @@
 .till-cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 3px;
   text-align: center;
 }
 
@@ -925,9 +993,10 @@
   border: 1px solid transparent;
   background: var(--color-surface);
   border-radius: var(--radius-md);
-  padding: 8px 0;
+  padding: 6px 0;
   cursor: pointer;
   font: inherit;
+  font-size: 14px;
 }
 
 .till-cal-day.on {
@@ -937,7 +1006,76 @@
 }
 
 .till-cal-time {
+  margin-top: var(--space-2);
+}
+
+.till-stock-section h2 {
   margin-top: var(--space-3);
+}
+
+.till-stock-unfile {
+  margin: 0 0 var(--space-3);
+}
+
+.till-roster {
+  overflow-x: auto;
+  display: grid;
+  gap: 6px;
+  margin-bottom: var(--space-4);
+}
+
+.till-roster-head,
+.till-roster-row {
+  display: grid;
+  grid-template-columns: 64px repeat(7, minmax(70px, 1fr));
+  gap: 4px;
+  align-items: start;
+}
+
+.till-roster-head strong,
+.till-roster-row > span {
+  font-size: 12px;
+  padding: 6px 2px;
+}
+
+.till-roster-head strong.on {
+  font-weight: 800;
+}
+
+.till-roster-cell {
+  min-height: 52px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-content: flex-start;
+  background: var(--color-surface);
+}
+
+.till-roster-cell.today {
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+}
+
+.till-roster-chip {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.till-roster-cell select {
+  border: 1px dashed var(--color-border);
+  background: transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px;
+  max-width: 100%;
 }
 
 .till-stock-list {
@@ -1106,4 +1244,5 @@
   }
   .till-menu { grid-template-columns: 1fr 1fr; }
   .till-day-rates { grid-template-columns: 1fr 1fr; }
+  .till-book-stage { grid-template-columns: 1fr; }
 }

@@ -49,6 +49,15 @@ describe("venue sync client", () => {
     expect(next.checks).toEqual([]);
   });
 
+  it("sessionize keeps who is on this till", () => {
+    const next = sessionize(toSnapshot(createInitialState()), {
+      unlocked: true,
+      pinError: null,
+      onStaff: { id: "maya", name: "Maya", role: "floor", at: 1 },
+    });
+    expect(next.onStaff.name).toBe("Maya");
+  });
+
   it("hasLocalService is true when a claim exists", () => {
     const claimed = claimTable(createInitialState(), "04", VENUE.tables, 1).state;
     expect(hasLocalService(claimed)).toBe(true);

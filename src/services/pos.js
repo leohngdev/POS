@@ -87,6 +87,11 @@ export const TABLE_W = 88;
 export const TABLE_H = 64;
 export const TABLE_GAP = 16;
 export const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const STAFF_ROLES = ["floor", "kitchen", "any"];
+export const DEFAULT_SERVICES = [
+  { id: "lunch", name: "Lunch" },
+  { id: "dinner", name: "Dinner" },
+];
 
 export function padTableId(raw) {
   const digits = String(raw ?? "").replace(/\D/g, "");
@@ -223,6 +228,18 @@ function normalizeStockItem(raw, existing = []) {
   };
 }
 
+function normalizeStaff(raw) {
+  if (!raw || !String(raw.name ?? "").trim()) return null;
+  const pin = String(raw.pin ?? "").replace(/\D/g, "");
+  if (pin.length < 4 || pin.length > 8) return null;
+  return {
+    id: String(raw.id || slugId(raw.name, [])),
+    name: String(raw.name).trim(),
+    pin,
+    role: STAFF_ROLES.includes(raw.role) ? raw.role : "any",
+  };
+}
+
 export function defaultVenue() {
   const zones = [DEFAULT_ZONE];
   const tables = VENUE.tables.map((id, i) => layoutTable(id, i, DEFAULT_ZONE.id));
@@ -251,6 +268,10 @@ export function defaultVenue() {
     bookingMins: 90,
     useStock: true,
     stockItems: [],
+    stockGroups: [],
+    useRoster: true,
+    staff: [],
+    services: DEFAULT_SERVICES.map((s) => ({ ...s })),
   };
 }
 
@@ -299,6 +320,35 @@ export function normalizeVenue(raw) {
         .filter((item, i, all) => all.findIndex((x) => x.id === item.id) === i)
         .slice(0, 80)
     : base.stockItems;
+  const groupTaken = [];
+  const inferred = [];
+  for (const item of stockItems) {
+    if (item.category && !inferred.includes(item.category)) inferred.push(item.category);
+  }
+  const stockGroups = (
+    Array.isArray(raw.stockGroups) && raw.stockGroups.length
+      ? raw.stockGroups
+      : inferred.map((name) => ({ name }))
+  )
+    .map((g, i) => {
+      const zone = normalizeZone(g, i, groupTaken);
+      groupTaken.push(zone.id);
+      return { id: zone.id, name: zone.name };
+    })
+    .filter((g, i, all) => all.findIndex((x) => x.id === g.id) === i)
+    .slice(0, 16);
+  for (const name of inferred) {
+    if (!stockGroups.some((g) => tableKey(g.name) === tableKey(name))) {
+      stockGroups.push(normalizeZone({ name }, stockGroups.length, stockGroups.map((g) => g.id)));
+    }
+  }
+  const staff = Array.isArray(raw.staff)
+    ? raw.staff.map(normalizeStaff).filter(Boolean).slice(0, 40)
+    : base.staff;
+  const services =
+    Array.isArray(raw.services) && raw.services.length
+      ? raw.services.map((s, i) => normalizeZone(s, i, [])).slice(0, 6)
+      : base.services;
   const surchargeByDay =
     Array.isArray(raw.surchargeByDay) && raw.surchargeByDay.length === 7
       ? raw.surchargeByDay.map((n) => clampRate(Number(n), base.surchargeRate))
@@ -324,6 +374,10 @@ export function normalizeVenue(raw) {
     bookingMins: BOOKING_MINS.includes(Number(raw.bookingMins)) ? Number(raw.bookingMins) : 90,
     useStock: raw.useStock === undefined ? true : Boolean(raw.useStock),
     stockItems,
+    stockGroups,
+    useRoster: raw.useRoster === undefined ? true : Boolean(raw.useRoster),
+    staff,
+    services,
   };
 }
 
@@ -370,6 +424,9 @@ export function createInitialState() {
     guestClaims: {},
     stock: { countedAt: null, qty: {}, extra: {} },
     stockOrders: [],
+    shifts: [],
+    clocks: [],
+    onStaff: null,
     venue: defaultVenue(),
   };
 }
@@ -394,6 +451,7 @@ export function updateVenueTaxes(state, patch) {
   if (patch.useBookings !== undefined) next.useBookings = patch.useBookings;
   if (patch.bookingMins !== undefined) next.bookingMins = patch.bookingMins;
   if (patch.useStock !== undefined) next.useStock = patch.useStock;
+  if (patch.useRoster !== undefined) next.useRoster = patch.useRoster;
   return updateVenue(state, next);
 }
 
@@ -407,6 +465,10 @@ export function setPin(state, pin) {
   const digits = String(pin ?? "").replace(/\D/g, "");
   if (digits.length < 4 || digits.length > 8) {
     return { ok: false, error: "PIN must be 4–8 digits.", state };
+  }
+  const venue = normalizeVenue(state.venue);
+  if (venue.staff.some((s) => s.pin === digits)) {
+    return { ok: false, error: "A person already uses that PIN. Pick another door code.", state };
   }
   return { ok: true, error: null, state: updateVenue(state, { pin: digits }) };
 }
@@ -689,11 +751,50 @@ export function receiveOrderLine(state, orderId, itemId, qty, now = Date.now()) 
 }
 
 export function stockCategories(venue) {
-  const names = [];
-  for (const item of normalizeVenue(venue).stockItems) {
-    if (item.category && !names.includes(item.category)) names.push(item.category);
+  return normalizeVenue(venue).stockGroups.map((g) => g.name);
+}
+
+export function addStockGroup(state, name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return { ok: false, error: "Name the shelf — Bar, Fridge, Dry.", state };
+  const venue = normalizeVenue(state.venue);
+  if (venue.stockGroups.length >= 16) return { ok: false, error: "Sixteen shelves is the cap.", state };
+  if (venue.stockGroups.some((g) => tableKey(g.name) === tableKey(trimmed))) {
+    return { ok: false, error: "That shelf is already there.", state };
   }
-  return names;
+  const group = normalizeZone({ name: trimmed }, venue.stockGroups.length, venue.stockGroups.map((g) => g.id));
+  return { ok: true, error: null, state: updateVenue(state, { stockGroups: [...venue.stockGroups, group] }) };
+}
+
+export function removeStockGroup(state, groupId) {
+  const venue = normalizeVenue(state.venue);
+  const group = venue.stockGroups.find((g) => g.id === groupId);
+  if (!group) return { ok: false, error: "No such shelf.", state };
+  const stockItems = venue.stockItems.map((i) =>
+    tableKey(i.category) === tableKey(group.name) ? { ...i, category: "" } : i
+  );
+  return {
+    ok: true,
+    error: null,
+    state: updateVenue(state, {
+      stockGroups: venue.stockGroups.filter((g) => g.id !== groupId),
+      stockItems,
+    }),
+  };
+}
+
+export function stockGrouped(items) {
+  const groups = [];
+  const seen = new Map();
+  for (const item of items ?? []) {
+    const key = item.category || "Unfiled";
+    if (!seen.has(key)) {
+      seen.set(key, groups.length);
+      groups.push({ name: key, items: [] });
+    }
+    groups[seen.get(key)].items.push(item);
+  }
+  return groups;
 }
 
 function menuIdFromName(name, menu) {
@@ -737,7 +838,121 @@ export function patchMenuItem(state, itemId, patch) {
 }
 
 export function verifyPin(pin, venue) {
-  return pin === venue.pin;
+  return Boolean(matchUnlock(pin, venue, null));
+}
+
+export function matchUnlock(pin, venue, staffId) {
+  const digits = String(pin ?? "").replace(/\D/g, "");
+  const live = normalizeVenue(venue);
+  if (staffId === "till") {
+    if (digits === live.pin) return { id: "till", name: "Till", role: "any" };
+    return null;
+  }
+  if (staffId) {
+    const person = live.staff.find((s) => s.id === staffId);
+    if (!person || person.pin !== digits) return null;
+    return { id: person.id, name: person.name, role: person.role };
+  }
+  const person = live.staff.find((s) => s.pin === digits);
+  if (person) return { id: person.id, name: person.name, role: person.role };
+  if (digits === live.pin) return { id: "till", name: "Till", role: "any" };
+  return null;
+}
+
+export function addStaff(state, draft) {
+  const name = String(draft.name ?? "").trim();
+  if (!name) return { ok: false, error: "Name the person.", state };
+  const pin = String(draft.pin ?? "").replace(/\D/g, "");
+  if (pin.length < 4 || pin.length > 8) return { ok: false, error: "Their PIN must be 4–8 digits.", state };
+  const venue = normalizeVenue(state.venue);
+  if (pin === venue.pin) return { ok: false, error: "That is the till door code. Give them their own PIN.", state };
+  if (venue.staff.some((s) => s.pin === pin)) return { ok: false, error: "Someone already has that PIN.", state };
+  if (venue.staff.length >= 40) return { ok: false, error: "Forty people is the cap.", state };
+  const person = normalizeStaff({ name, pin, role: draft.role });
+  if (!person) return { ok: false, error: "Name the person.", state };
+  if (venue.staff.some((s) => s.id === person.id)) person.id = `${person.id}-${venue.staff.length + 1}`;
+  return { ok: true, error: null, state: updateVenue(state, { staff: [...venue.staff, person] }) };
+}
+
+export function removeStaff(state, staffId) {
+  const venue = normalizeVenue(state.venue);
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...updateVenue(state, { staff: venue.staff.filter((s) => s.id !== staffId) }),
+      shifts: (state.shifts ?? []).filter((s) => s.staffId !== staffId),
+    },
+  };
+}
+
+export function addService(state, name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return { ok: false, error: "Name the service — Lunch, Dinner, Arvo.", state };
+  const venue = normalizeVenue(state.venue);
+  if (venue.services.length >= 6) return { ok: false, error: "Six services is the cap.", state };
+  if (venue.services.some((s) => tableKey(s.name) === tableKey(trimmed))) {
+    return { ok: false, error: "That service is already on the week.", state };
+  }
+  const service = normalizeZone({ name: trimmed }, venue.services.length, venue.services.map((s) => s.id));
+  return { ok: true, error: null, state: updateVenue(state, { services: [...venue.services, service] }) };
+}
+
+export function removeService(state, serviceId) {
+  const venue = normalizeVenue(state.venue);
+  if (venue.services.length <= 1) return { ok: false, error: "Keep at least one service.", state };
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...updateVenue(state, { services: venue.services.filter((s) => s.id !== serviceId) }),
+      shifts: (state.shifts ?? []).filter((s) => s.serviceId !== serviceId),
+    },
+  };
+}
+
+export function toggleShift(state, staffId, day, serviceId) {
+  const venue = normalizeVenue(state.venue);
+  if (!venue.staff.some((s) => s.id === staffId)) return { ok: false, error: "No such person.", state };
+  if (!venue.services.some((s) => s.id === serviceId)) return { ok: false, error: "No such service.", state };
+  const d = Number(day);
+  if (!Number.isInteger(d) || d < 0 || d > 6) return { ok: false, error: "Pick a day.", state };
+  const shifts = [...(state.shifts ?? [])];
+  const idx = shifts.findIndex((s) => s.staffId === staffId && s.day === d && s.serviceId === serviceId);
+  if (idx >= 0) shifts.splice(idx, 1);
+  else shifts.push({ staffId, day: d, serviceId });
+  return { ok: true, error: null, state: { ...state, shifts } };
+}
+
+export function rosterOn(state, day, serviceId) {
+  const ids = (state.shifts ?? [])
+    .filter((s) => s.day === day && s.serviceId === serviceId)
+    .map((s) => s.staffId);
+  const venue = normalizeVenue(state.venue);
+  return venue.staff.filter((p) => ids.includes(p.id));
+}
+
+export function clockIn(state, staff, now = Date.now()) {
+  if (!staff?.id) return { ok: false, error: "Who is this?", state };
+  const clocks = (state.clocks ?? []).map((c) =>
+    c.staffId === staff.id && !c.outAt ? { ...c, outAt: now } : c
+  );
+  clocks.push({ staffId: staff.id, inAt: now, outAt: null });
+  return {
+    ok: true,
+    error: null,
+    state: {
+      ...state,
+      onStaff: { id: staff.id, name: staff.name, role: staff.role ?? "any", at: now },
+      clocks: clocks.slice(-200),
+    },
+  };
+}
+
+export function clockOut(state, now = Date.now()) {
+  const id = state.onStaff?.id;
+  const clocks = (state.clocks ?? []).map((c) => (id && c.staffId === id && !c.outAt ? { ...c, outAt: now } : c));
+  return { ok: true, error: null, state: { ...state, onStaff: null, clocks } };
 }
 
 export function openCheckForTable(checks, tableId) {
@@ -1160,6 +1375,7 @@ export function endNight(state, now = Date.now()) {
       lastBumpedChitId,
       guestClaims: {},
       bookings: pruneBookings(state.bookings ?? [], now),
+      clocks: (state.clocks ?? []).filter((c) => now - Number(c.inAt) < 7 * 24 * 60 * 60 * 1000),
     },
   };
 }

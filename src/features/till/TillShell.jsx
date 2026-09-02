@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DineInView } from "./DineInView";
 import { BookView } from "./BookView";
 import { StockView } from "./StockView";
+import { RosterView } from "./RosterView";
 import { TakeawayView } from "./TakeawayView";
 import { TicketsView } from "./TicketsView";
 import { KitchenView } from "./KitchenView";
@@ -12,11 +13,12 @@ import { hasPendingGuestClaims } from "../../services/pos";
 
 const NAV = [
   { id: "dine-in", label: "Dine in" },
-  { id: "book", label: "Book", book: true },
+  { id: "book", label: "Book" },
   { id: "takeaway", label: "Takeaway" },
   { id: "tickets", label: "Tickets" },
   { id: "kitchen", label: "Kitchen" },
   { id: "stock", label: "Stock" },
+  { id: "roster", label: "Roster" },
   { id: "history", label: "History" },
   { id: "settings", label: "Settings" },
 ];
@@ -28,10 +30,12 @@ export function TillShell() {
   const items = NAV.filter((item) => {
     if (item.id === "book" && venue.useBookings === false) return false;
     if (item.id === "stock" && venue.useStock === false) return false;
+    if (item.id === "roster" && venue.useRoster === false) return false;
     return true;
   });
   const current = items.some((item) => item.id === nav) ? nav : "dine-in";
   const wide = current === "kitchen" || current === "settings";
+  const onName = state.onStaff?.name;
 
   return (
     <div className={`till-root till-shell${wide ? " till-shell-kitchen" : ""}`}>
@@ -50,6 +54,7 @@ export function TillShell() {
             {item.label}
           </button>
         ))}
+        <p className="till-on">{onName && onName !== "Till" ? `${onName} is on` : "Till unlocked"}</p>
         <button type="button" className="till-ghost till-lock" onClick={lock}>
           Lock
         </button>
@@ -60,6 +65,7 @@ export function TillShell() {
       {current === "tickets" ? <TicketsView /> : null}
       {current === "kitchen" ? <KitchenView /> : null}
       {current === "stock" ? <StockView /> : null}
+      {current === "roster" ? <RosterView /> : null}
       {current === "history" ? <HistoryView /> : null}
       {current === "settings" ? <SettingsView /> : null}
     </div>
