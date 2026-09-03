@@ -12,8 +12,8 @@
 }
 
 .till-root h1 {
-  font-size: 28px;
-  margin-bottom: var(--space-5);
+  font-size: 22px;
+  margin-bottom: var(--space-3);
 }
 
 .till-root h2 {
@@ -202,7 +202,7 @@
 }
 
 .till-workspace {
-  padding: var(--space-6);
+  padding: var(--space-4) var(--space-6);
   overflow: auto;
 }
 
@@ -473,7 +473,7 @@
 
 .till-settings {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   max-width: 360px;
 }
 
@@ -662,6 +662,8 @@
   padding: 8px 10px;
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
+  margin: 0 0 var(--space-3);
+}
   background: var(--color-bg);
 }
 
@@ -738,6 +740,10 @@
 }
 
 .till-floor.editing {
+  cursor: grab;
+}
+
+.till-floor.editing .till-floor-table {
   cursor: grab;
 }
 
@@ -1128,7 +1134,140 @@
 }
 
 .till-table-edit {
-  grid-template-columns: 72px 88px minmax(72px, 1fr) 64px auto auto auto;
+  grid-template-columns: 36px 72px 88px minmax(72px, 1fr) 64px auto;
+}
+
+.till-drag {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  height: 40px;
+  font: inherit;
+  color: var(--color-muted);
+}
+
+.till-drag:active {
+  cursor: grabbing;
+}
+
+.till-page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.till-page-head h1,
+.till-page-head h2 {
+  margin: 0;
+}
+
+.till-page-head .till-muted {
+  margin: 0;
+}
+
+.till-find {
+  min-width: 180px;
+}
+
+.till-compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  max-width: 640px;
+  margin-bottom: var(--space-4);
+}
+
+.till-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: var(--space-4);
+}
+
+.till-flags label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.till-links {
+  display: grid;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.till-people {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.till-person {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  background: var(--color-surface);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.till-person span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.till-person.on {
+  border-color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+}
+
+.till-week {
+  display: grid;
+  gap: 8px;
+  margin-bottom: var(--space-4);
+}
+
+.till-week-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.till-week-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.till-week-day {
+  min-width: 40px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 999px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.till-week-day.on {
+  border-color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 22%, var(--color-surface));
+  font-weight: 700;
 }
 
 .till-zone-edit {
@@ -1245,4 +1384,5 @@
   .till-menu { grid-template-columns: 1fr 1fr; }
   .till-day-rates { grid-template-columns: 1fr 1fr; }
   .till-book-stage { grid-template-columns: 1fr; }
+  .till-compact { grid-template-columns: 1fr; }
 }

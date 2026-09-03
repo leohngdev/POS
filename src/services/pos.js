@@ -955,6 +955,30 @@ export function clockOut(state, now = Date.now()) {
   return { ok: true, error: null, state: { ...state, onStaff: null, clocks } };
 }
 
+export function openClock(state, staffId) {
+  return (state.clocks ?? []).find((c) => c.staffId === staffId && !c.outAt) ?? null;
+}
+
+export function whoIsClocked(state, venue) {
+  const ids = [...new Set((state.clocks ?? []).filter((c) => !c.outAt).map((c) => c.staffId))];
+  return normalizeVenue(venue).staff.filter((p) => ids.includes(p.id));
+}
+
+export function punchIn(state, staff, now = Date.now()) {
+  if (!staff?.id || staff.id === "till") return { ok: false, error: "Clock in as a person.", state };
+  const clocks = (state.clocks ?? []).map((c) => (c.staffId === staff.id && !c.outAt ? { ...c, outAt: now } : c));
+  clocks.push({ staffId: staff.id, inAt: now, outAt: null });
+  return { ok: true, error: null, state: { ...state, clocks: clocks.slice(-200) } };
+}
+
+export function punchOut(state, staffId, now = Date.now()) {
+  if (!staffId || staffId === "till") return { ok: false, error: "Clock out as a person.", state };
+  if (!openClock(state, staffId)) return { ok: false, error: "Already out.", state };
+  const clocks = (state.clocks ?? []).map((c) => (c.staffId === staffId && !c.outAt ? { ...c, outAt: now } : c));
+  const onStaff = state.onStaff?.id === staffId ? null : state.onStaff;
+  return { ok: true, error: null, state: { ...state, clocks, onStaff } };
+}
+
 export function openCheckForTable(checks, tableId) {
   return checks.find((c) => c.channel === "dine-in" && c.tableId === tableId && c.status === "open") ?? null;
 }

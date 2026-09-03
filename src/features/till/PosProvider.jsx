@@ -49,6 +49,8 @@ import {
   matchUnlock,
   clockIn,
   clockOut,
+  punchIn as punchClockIn,
+  punchOut as punchClockOut,
   addStaff,
   removeStaff,
   addService,
@@ -353,6 +355,20 @@ export function PosProvider({ children }) {
     },
     takeOrderLine(orderId, itemId) {
       return withSync((latest) => receiveOrderLine(latest, orderId, itemId, undefined, Date.now()));
+    },
+    punchIn(pin, staffId) {
+      return withSync((latest) => {
+        const who = matchUnlock(pin, latest.venue, staffId);
+        if (!who || who.id === "till") return { ok: false, error: "Use your own PIN.", state: latest };
+        return punchClockIn(latest, who, Date.now());
+      });
+    },
+    punchOut(pin, staffId) {
+      return withSync((latest) => {
+        const who = matchUnlock(pin, latest.venue, staffId);
+        if (!who || who.id === "till") return { ok: false, error: "Use your own PIN.", state: latest };
+        return punchClockOut(latest, who.id, Date.now());
+      });
     },
     addPerson(draft) {
       return withSync((latest) => addStaff(latest, draft));

@@ -61,6 +61,10 @@ import {
   rosterOn,
   clockIn,
   clockOut,
+  punchIn,
+  punchOut,
+  openClock,
+  whoIsClocked,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -905,5 +909,16 @@ describe("Roster", () => {
     const out = clockOut(inNow.state, 20);
     expect(out.state.onStaff).toBeNull();
     expect(out.state.clocks[0].outAt).toBe(20);
+  });
+
+  it("punches a person without putting them on this till", () => {
+    const maya = addStaff(createInitialState(), { name: "Maya", pin: "2222" });
+    const who = maya.state.venue.staff[0];
+    const inNow = punchIn(maya.state, who, 10);
+    expect(inNow.state.onStaff).toBeNull();
+    expect(openClock(inNow.state, who.id).inAt).toBe(10);
+    const out = punchOut(inNow.state, who.id, 20);
+    expect(out.state.clocks[0].outAt).toBe(20);
+    expect(whoIsClocked(out.state, out.state.venue)).toHaveLength(0);
   });
 });

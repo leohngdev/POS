@@ -109,6 +109,7 @@ export function SettingsView() {
   const firstTable = liveTables(venue)[0] ?? "01";
   const guestHome = `${window.location.origin}${window.location.pathname}#/order`;
   const guestTable = `${guestHome}/${firstTable}`;
+  const clockHome = `${window.location.origin}${window.location.pathname}#/clock`;
   const loopback = isLoopbackHost(window.location.hostname);
 
   function setPercent(field, raw) {
@@ -136,11 +137,10 @@ export function SettingsView() {
 
   return (
     <main className="till-workspace till-settings-page">
-      <h1>Settings</h1>
-      <p className="till-muted">
-        This restaurant. Change what you use; leave the rest off.
-        {syncStatus === "live" ? " Venue live." : " This device only until `npm run dev` or `npm start`."}
-      </p>
+      <div className="till-page-head">
+        <h1>Settings</h1>
+        <p className="till-muted">{syncStatus === "live" ? "Venue live" : "This device only"}</p>
+      </div>
       {notice ? (
         <p className={notice.startsWith("Saved") || notice.startsWith("Added") || notice.startsWith("Night") || notice.startsWith("Removed") ? "till-ok" : "till-error"}>
           {notice}
@@ -156,89 +156,101 @@ export function SettingsView() {
 
       {tab === "venue" ? (
         <>
-          <section className="till-settings till-settings-wide">
+          <section className="till-compact">
             <label className="till-setting">
               Restaurant name
               <input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name !== venue.name && renameVenue(name).then((r) => flash(r, "Saved name"))} />
             </label>
             <label className="till-setting">
-              Staff PIN
-              <input inputMode="numeric" placeholder="4–8 digits, blank keeps current" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} />
-              <button type="button" className="till-ghost till-copy" disabled={pin.length < 4} onClick={() => changePin(pin).then((r) => { flash(r, "Saved PIN"); if (r.ok) setPin(""); })}>
-                Save PIN
-              </button>
-              <span className="till-muted">A till PIN is a door code, not a login. Named staff get their own PIN on Roster. Lock when you walk away — or auto-lock below.</span>
+              Till door PIN
+              <span className="till-add-table">
+                <input inputMode="numeric" placeholder="4–8 digits" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} />
+                <button type="button" className="till-ghost till-copy" disabled={pin.length < 4} onClick={() => changePin(pin).then((r) => { flash(r, "Saved PIN"); if (r.ok) setPin(""); })}>
+                  Save
+                </button>
+              </span>
             </label>
             <label className="till-setting">
               Auto-lock
               <select value={String(venue.lockMins)} onChange={(e) => setVenueTaxes({ lockMins: Number(e.target.value) })}>
-                <option value="0">Off — lock yourself</option>
-                <option value="5">After 5 minutes idle</option>
-                <option value="10">After 10 minutes idle</option>
-                <option value="30">After 30 minutes idle</option>
+                <option value="0">Off</option>
+                <option value="5">5 minutes</option>
+                <option value="10">10 minutes</option>
+                <option value="30">30 minutes</option>
               </select>
             </label>
-            <label className="till-setting">
-              <input type="checkbox" checked={venue.askTakeawayPhone} onChange={(e) => setVenueTaxes({ askTakeawayPhone: e.target.checked })} />
-              Ask for takeaway phone
-            </label>
-            <label className="till-setting">
-              <input type="checkbox" checked={venue.askTakeawayEmail} onChange={(e) => setVenueTaxes({ askTakeawayEmail: e.target.checked })} />
-              Ask for takeaway email
-            </label>
-            <label className="till-setting">
+            {venue.useBookings !== false ? (
+              <label className="till-setting">
+                Hold tables
+                <select value={String(venue.bookingMins ?? 90)} onChange={(e) => setVenueTaxes({ bookingMins: Number(e.target.value) })}>
+                  <option value="60">60 minutes</option>
+                  <option value="90">90 minutes</option>
+                  <option value="120">2 hours</option>
+                  <option value="150">2.5 hours</option>
+                </select>
+              </label>
+            ) : null}
+          </section>
+          <div className="till-flags">
+            <label>
               <input type="checkbox" checked={venue.useBookings !== false} onChange={(e) => setVenueTaxes({ useBookings: e.target.checked })} />
-              Take bookings
+              Bookings
             </label>
-            <label className="till-setting">
-              Hold tables for
-              <select value={String(venue.bookingMins ?? 90)} onChange={(e) => setVenueTaxes({ bookingMins: Number(e.target.value) })}>
-                <option value="60">60 minutes</option>
-                <option value="90">90 minutes</option>
-                <option value="120">2 hours</option>
-                <option value="150">2.5 hours</option>
-              </select>
-              <span className="till-muted">How long a name owns a table in the book. Turn bookings off if this venue is walk-in only.</span>
-            </label>
-            <label className="till-setting">
+            <label>
               <input type="checkbox" checked={venue.useStock !== false} onChange={(e) => setVenueTaxes({ useStock: e.target.checked })} />
-              Count stock
+              Stock
             </label>
-            <label className="till-setting">
+            <label>
               <input type="checkbox" checked={venue.useRoster !== false} onChange={(e) => setVenueTaxes({ useRoster: e.target.checked })} />
-              Use roster
+              Roster
             </label>
-            <span className="till-muted">Turn roster off if this till is just a door code. Names, the week grid, and clock-in leave the nav.</span>
-          </section>
-          <h2>Guest order</h2>
-          <p className="till-muted">
-            Phone and till on the same Wi‑Fi.
-            {loopback ? " This tab is localhost — open the LAN address on this PC first." : " Copy a link onto the guest phone."}
-          </p>
-          <section className="till-settings">
+            <label>
+              <input type="checkbox" checked={venue.askTakeawayPhone} onChange={(e) => setVenueTaxes({ askTakeawayPhone: e.target.checked })} />
+              Takeaway phone
+            </label>
+            <label>
+              <input type="checkbox" checked={venue.askTakeawayEmail} onChange={(e) => setVenueTaxes({ askTakeawayEmail: e.target.checked })} />
+              Takeaway email
+            </label>
+          </div>
+          <div className="till-links">
             <label className="till-setting">
-              Claim a table
-              <code className="till-code">{guestHome}</code>
-              <button type="button" className="till-ghost till-copy" onClick={() => copy("home", guestHome)}>
-                {copied === "home" ? "Copied" : "Copy"}
-              </button>
+              Guest order
+              <span className="till-add-table">
+                <code className="till-code">{guestHome}</code>
+                <button type="button" className="till-ghost till-copy" onClick={() => copy("home", guestHome)}>
+                  {copied === "home" ? "Copied" : "Copy"}
+                </button>
+              </span>
             </label>
             <label className="till-setting">
-              Table {firstTable} shortcut
-              <code className="till-code">{guestTable}</code>
-              <button type="button" className="till-ghost till-copy" onClick={() => copy("table", guestTable)}>
-                {copied === "table" ? "Copied" : "Copy"}
-              </button>
+              Table {firstTable}
+              <span className="till-add-table">
+                <code className="till-code">{guestTable}</code>
+                <button type="button" className="till-ghost till-copy" onClick={() => copy("table", guestTable)}>
+                  {copied === "table" ? "Copied" : "Copy"}
+                </button>
+              </span>
             </label>
-          </section>
+            {venue.useRoster !== false ? (
+              <label className="till-setting">
+                Staff clock
+                <span className="till-add-table">
+                  <code className="till-code">{clockHome}</code>
+                  <button type="button" className="till-ghost till-copy" onClick={() => copy("clock", clockHome)}>
+                    {copied === "clock" ? "Copied" : "Copy"}
+                  </button>
+                </span>
+              </label>
+            ) : null}
+          </div>
+          {loopback ? <p className="till-muted">Phones need this PC’s LAN address, not localhost.</p> : null}
         </>
       ) : null}
 
       {tab === "floor" ? (
         <>
-          <p className="till-muted">
-            Name tables the way they are printed — 1a, 1b, 4, 17. Drag the map. Use Up/Down so 2a sits next to 2 in the list and on the strip.
-          </p>
+          <p className="till-muted">Drag the tables on the map like the room. Drag a row to change the strip order.</p>
           {liveZones(venue).length > 1 ? (
             <div className="till-strip">
               {liveZones(venue).map((z) => (
@@ -278,7 +290,32 @@ export function SettingsView() {
           <FloorMap tables={venue.tables} editor onMove={(id, patch) => moveFloorTable(id, patch)} />
           <div className="till-floor-list">
             {venue.tables.map((t) => (
-              <div key={t.id} className="till-menu-row till-table-edit">
+              <div
+                key={t.id}
+                className="till-menu-row till-table-edit"
+                data-table-row={t.id}
+              >
+                <button
+                  type="button"
+                  className="till-drag"
+                  aria-label={`Move ${t.id} in the list`}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    const fromId = t.id;
+                    function up(ev) {
+                      window.removeEventListener("pointerup", up);
+                      const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+                      const row = hit?.closest("[data-table-row]");
+                      const toId = row?.getAttribute("data-table-row");
+                      if (!toId || toId === fromId) return;
+                      const toIndex = venue.tables.findIndex((x) => x.id === toId);
+                      if (toIndex >= 0) reorderFloorTable(fromId, toIndex);
+                    }
+                    window.addEventListener("pointerup", up);
+                  }}
+                >
+                  ≡
+                </button>
                 <input
                   defaultValue={t.id}
                   aria-label={`Rename table ${t.id}`}
@@ -310,22 +347,6 @@ export function SettingsView() {
                     if (n && n !== t.seats) moveFloorTable(t.id, { seats: n });
                   }}
                 />
-                <button
-                  type="button"
-                  className="till-ghost"
-                  disabled={venue.tables[0]?.id === t.id}
-                  onClick={() => reorderFloorTable(t.id, venue.tables.findIndex((x) => x.id === t.id) - 1)}
-                >
-                  Up
-                </button>
-                <button
-                  type="button"
-                  className="till-ghost"
-                  disabled={venue.tables.at(-1)?.id === t.id}
-                  onClick={() => reorderFloorTable(t.id, venue.tables.findIndex((x) => x.id === t.id) + 1)}
-                >
-                  Down
-                </button>
                 <button type="button" className="till-ghost" onClick={() => removeFloorTable(t.id).then((r) => flash(r, `Removed ${t.id}`))}>
                   Remove
                 </button>

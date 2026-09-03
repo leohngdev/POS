@@ -23,12 +23,13 @@ export function HistoryView() {
   return (
     <>
       <main className="till-workspace">
-        <h1>History</h1>
-        <p className="till-muted">Paid tickets stay here after End of night so you can reprint.</p>
-        <label className="till-name">
-          Find a receipt
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Table, name, T-01" />
-        </label>
+        <div className="till-page-head">
+          <h1>History</h1>
+          <label className="till-name till-find">
+            Find
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Table, name, T-01" />
+          </label>
+        </div>
         {filtered.length === 0 ? (
           <p className="till-empty">No receipts yet</p>
         ) : (

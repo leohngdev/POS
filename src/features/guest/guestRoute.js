@@ -6,6 +6,10 @@ export function parseGuestRoute(hash) {
   return { isGuest: true, tableId: match[1] ? decodeURIComponent(match[1]) : null };
 }
 
+export function parseClockRoute(hash) {
+  return /^#\/clock\/?$/.test(String(hash ?? ""));
+}
+
 export function useGuestRoute() {
   const [hash, setHash] = useState(() => window.location.hash);
   useEffect(() => {
@@ -14,4 +18,14 @@ export function useGuestRoute() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
   return parseGuestRoute(hash);
+}
+
+export function useClockRoute() {
+  const [hash, setHash] = useState(() => window.location.hash);
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  return parseClockRoute(hash);
 }

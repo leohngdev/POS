@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGuestRoute } from "./guestRoute";
+import { parseClockRoute, parseGuestRoute } from "./guestRoute";
 
 describe("parseGuestRoute", () => {
   it("treats #/order as the guest claim screen", () => {
@@ -15,5 +15,11 @@ describe("parseGuestRoute", () => {
     expect(parseGuestRoute("")).toEqual({ isGuest: false, tableId: null });
     expect(parseGuestRoute("#/kitchen")).toEqual({ isGuest: false, tableId: null });
     expect(parseGuestRoute("#/orders")).toEqual({ isGuest: false, tableId: null });
+    expect(parseGuestRoute("#/clock")).toEqual({ isGuest: false, tableId: null });
+  });
+
+  it("treats #/clock as the staff clock", () => {
+    expect(parseClockRoute("#/clock")).toBe(true);
+    expect(parseClockRoute("#/order")).toBe(false);
   });
 });

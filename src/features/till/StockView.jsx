@@ -82,10 +82,9 @@ export function StockView() {
   return (
     <>
       <main className="till-workspace">
-        <h1>Stock</h1>
-        <p className="till-muted">
-          Count one shelf at a time. Par is what you want. Buy is the gap. Turn this off in Settings if this venue does not count.
-        </p>
+        <div className="till-page-head">
+          <h1>Stock</h1>
+        </div>
         <div className="till-strip">
           {cats.length ? (
             <button type="button" className={active === "all" ? "till-table till-table-sm on" : "till-table till-table-sm"} onClick={() => setFilter("all")}>
