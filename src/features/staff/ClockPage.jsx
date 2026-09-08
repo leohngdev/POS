@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { formatClock, openClock } from "../../services/pos";
+import { formatClock, openBreak, openClock } from "../../services/pos";
 import { usePos } from "../till/PosProvider";
 
 export function ClockPage() {
-  const { state, venue, punchIn, punchOut } = usePos();
+  const { state, venue, punchIn, punchOut, punchBreak } = usePos();
   const [who, setWho] = useState(null);
   const [digits, setDigits] = useState("");
   const [notice, setNotice] = useState(null);
   const people = venue.staff ?? [];
   const person = people.find((p) => p.id === who) ?? null;
   const open = who ? openClock(state, who) : null;
+  const pausing = open ? openBreak(open) : null;
   const off = venue.useRoster === false;
 
   function press(d) {
@@ -21,13 +22,14 @@ export function ClockPage() {
   }
 
   function go(action) {
-    const run = action === "in" ? punchIn : punchOut;
+    const run = action === "in" ? punchIn : action === "out" ? punchOut : punchBreak;
     run(digits, who).then((result) => {
       if (!result.ok) {
         setNotice(result.error);
         return;
       }
-      setNotice(action === "in" ? `In · ${formatClock(Date.now())}` : "Out");
+      const label = action === "in" ? `In · ${formatClock(Date.now())}` : action === "out" ? "Out" : pausing ? "Break over" : "On break";
+      setNotice(label);
       setDigits("");
     });
   }
@@ -46,18 +48,17 @@ export function ClockPage() {
     );
   }
 
+  let status = "Your PIN to clock in.";
+  if (!person) status = "Your phone or the clock tablet. Tap your name.";
+  else if (pausing) status = `On break since ${formatClock(pausing.inAt)}. PIN to come back or clock out.`;
+  else if (open) status = `In since ${formatClock(open.inAt)}. Break or clock out.`;
+
   return (
     <div className="till-root till-gate">
       <div className="till-gate-box">
         <p className="till-eyebrow">{venue.name || "Clock"}</p>
         <h1>{person ? person.name : "Clock in"}</h1>
-        {!person ? (
-          <p className="till-muted">Your phone. Not the till. Tap your name.</p>
-        ) : open ? (
-          <p className="till-muted">In since {formatClock(open.inAt)}. PIN to clock out.</p>
-        ) : (
-          <p className="till-muted">Your PIN to clock in.</p>
-        )}
+        <p className="till-muted">{status}</p>
         {!person ? (
           <div className="till-who">
             {people.length === 0 ? <p className="till-muted">No names on the book yet.</p> : null}
@@ -83,7 +84,7 @@ export function ClockPage() {
             <div className="till-pin-dots" aria-label="PIN length">
               {digits.length ? digits.replace(/./g, "•") : "enter PIN"}
             </div>
-            {notice ? <p className={/^(In|Out)/.test(notice) ? "till-ok" : "till-error"}>{notice}</p> : null}
+            {notice ? <p className={/^(In|Out|On break|Break)/.test(notice) ? "till-ok" : "till-error"}>{notice}</p> : null}
             <div className="till-pad">
               {keys.map((k, i) =>
                 k === "" ? (
@@ -96,9 +97,14 @@ export function ClockPage() {
               )}
             </div>
             {open ? (
-              <button type="button" className="till-primary" onClick={() => go("out")} disabled={!digits}>
-                Clock out
-              </button>
+              <div className="till-clock-actions">
+                <button type="button" className="till-ghost" onClick={() => go("break")} disabled={!digits}>
+                  {pausing ? "End break" : "Start break"}
+                </button>
+                <button type="button" className="till-primary" onClick={() => go("out")} disabled={!digits}>
+                  Clock out
+                </button>
+              </div>
             ) : (
               <button type="button" className="till-primary" onClick={() => go("in")} disabled={!digits}>
                 Clock in

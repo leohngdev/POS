@@ -30,6 +30,25 @@ function snapshotVenue(venue) {
   return next;
 }
 
+const CLOCK_CAP = 400;
+
+function snapshotClocks(clocks) {
+  if (!Array.isArray(clocks)) return [];
+  return clocks
+    .filter((c) => c && c.staffId != null && c.inAt != null)
+    .map((c) => ({
+      staffId: String(c.staffId),
+      inAt: Number(c.inAt),
+      outAt: c.outAt == null ? null : Number(c.outAt),
+      breaks: Array.isArray(c.breaks)
+        ? c.breaks
+            .filter((b) => b && b.inAt != null)
+            .map((b) => ({ inAt: Number(b.inAt), outAt: b.outAt == null ? null : Number(b.outAt) }))
+        : [],
+    }))
+    .slice(-CLOCK_CAP);
+}
+
 function normalizeGuestClaims(raw) {
   if (!raw || typeof raw !== "object") return {};
   const next = {};
@@ -64,7 +83,7 @@ export function toSnapshot(state) {
     stock: state.stock ?? { countedAt: null, qty: {}, extra: {} },
     stockOrders: Array.isArray(state.stockOrders) ? state.stockOrders : [],
     shifts: Array.isArray(state.shifts) ? state.shifts : [],
-    clocks: Array.isArray(state.clocks) ? state.clocks : [],
+    clocks: snapshotClocks(state.clocks),
     venue: snapshotVenue(state.venue),
   };
 }
@@ -91,7 +110,7 @@ export function fromSnapshot(raw, baseState) {
     stock: raw.stock && typeof raw.stock === "object" ? raw.stock : { countedAt: null, qty: {}, extra: {} },
     stockOrders: Array.isArray(raw.stockOrders) ? raw.stockOrders : [],
     shifts: Array.isArray(raw.shifts) ? raw.shifts : [],
-    clocks: Array.isArray(raw.clocks) ? raw.clocks : [],
+    clocks: snapshotClocks(raw.clocks),
     venue: { ...baseState.venue, ...raw.venue },
   };
 }

@@ -237,6 +237,10 @@ function normalizeStaff(raw) {
     name: String(raw.name).trim(),
     pin,
     role: STAFF_ROLES.includes(raw.role) ? raw.role : "any",
+    payRate: Math.max(0, roundMoney(Number(raw.payRate) || 0)),
+    offDays: Array.isArray(raw.offDays)
+      ? [...new Set(raw.offDays.map((n) => Number(n)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))]
+      : [],
   };
 }
 
@@ -868,10 +872,38 @@ export function addStaff(state, draft) {
   if (pin === venue.pin) return { ok: false, error: "That is the till door code. Give them their own PIN.", state };
   if (venue.staff.some((s) => s.pin === pin)) return { ok: false, error: "Someone already has that PIN.", state };
   if (venue.staff.length >= 40) return { ok: false, error: "Forty people is the cap.", state };
-  const person = normalizeStaff({ name, pin, role: draft.role });
+  const person = normalizeStaff({ name, pin, role: draft.role, payRate: draft.payRate });
   if (!person) return { ok: false, error: "Name the person.", state };
   if (venue.staff.some((s) => s.id === person.id)) person.id = `${person.id}-${venue.staff.length + 1}`;
   return { ok: true, error: null, state: updateVenue(state, { staff: [...venue.staff, person] }) };
+}
+
+export function patchStaff(state, staffId, patch) {
+  const venue = normalizeVenue(state.venue);
+  if (!venue.staff.some((s) => s.id === staffId)) return { ok: false, error: "No such person.", state };
+  const staff = venue.staff.map((s) => {
+    if (s.id !== staffId) return s;
+    return normalizeStaff({
+      ...s,
+      payRate: patch.payRate !== undefined ? patch.payRate : s.payRate,
+      offDays: patch.offDays !== undefined ? patch.offDays : s.offDays,
+      pin: s.pin,
+      name: patch.name !== undefined ? patch.name : s.name,
+      role: patch.role !== undefined ? patch.role : s.role,
+    });
+  });
+  if (staff.some((s) => !s)) return { ok: false, error: "Name the person.", state };
+  return { ok: true, error: null, state: updateVenue(state, { staff }) };
+}
+
+export function toggleOffDay(state, staffId, day) {
+  const venue = normalizeVenue(state.venue);
+  const person = venue.staff.find((s) => s.id === staffId);
+  if (!person) return { ok: false, error: "No such person.", state };
+  const d = Number(day);
+  if (!Number.isInteger(d) || d < 0 || d > 6) return { ok: false, error: "Pick a day.", state };
+  const offDays = person.offDays.includes(d) ? person.offDays.filter((x) => x !== d) : [...person.offDays, d];
+  return patchStaff(state, staffId, { offDays });
 }
 
 export function removeStaff(state, staffId) {
@@ -932,51 +964,167 @@ export function rosterOn(state, day, serviceId) {
   return venue.staff.filter((p) => ids.includes(p.id));
 }
 
+const CLOCK_KEEP_MS = 90 * 24 * 60 * 60 * 1000;
+const CLOCK_CAP = 400;
+
+export function normalizePunch(raw) {
+  if (!raw || raw.staffId == null || raw.inAt == null) return null;
+  const breaks = Array.isArray(raw.breaks)
+    ? raw.breaks
+        .filter((b) => b && b.inAt != null)
+        .map((b) => ({ inAt: Number(b.inAt), outAt: b.outAt == null ? null : Number(b.outAt) }))
+    : [];
+  return {
+    staffId: String(raw.staffId),
+    inAt: Number(raw.inAt),
+    outAt: raw.outAt == null ? null : Number(raw.outAt),
+    breaks,
+  };
+}
+
+function liveClocks(clocks) {
+  return (clocks ?? []).map(normalizePunch).filter(Boolean).slice(-CLOCK_CAP);
+}
+
+function keepClocks(clocks, now = Date.now()) {
+  return liveClocks(clocks).filter((c) => now - c.inAt < CLOCK_KEEP_MS);
+}
+
+function closeBreaks(punch, now) {
+  return {
+    ...punch,
+    breaks: (punch.breaks ?? []).map((b) => (b.outAt == null ? { ...b, outAt: now } : b)),
+  };
+}
+
+export function openBreak(clock) {
+  const punch = normalizePunch(clock);
+  return punch?.breaks.find((b) => b.outAt == null) ?? null;
+}
+
+export function breakMs(clock, now = Date.now()) {
+  const punch = normalizePunch(clock);
+  if (!punch) return 0;
+  return punch.breaks.reduce((sum, b) => {
+    const end = b.outAt ?? punch.outAt ?? now;
+    return sum + Math.max(0, end - b.inAt);
+  }, 0);
+}
+
+export function workedMs(clock, now = Date.now()) {
+  const punch = normalizePunch(clock);
+  if (!punch) return 0;
+  const end = punch.outAt ?? now;
+  return Math.max(0, end - punch.inAt - breakMs(punch, now));
+}
+
+export function startOfWeek(at) {
+  const d = new Date(at);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return d.getTime();
+}
+
+export function payDue(hours, rate) {
+  return roundMoney(Math.max(0, Number(hours) || 0) * Math.max(0, Number(rate) || 0));
+}
+
+export function weekSheet(state, venue, at = Date.now()) {
+  const from = startOfWeek(at);
+  const to = from + 7 * 24 * 60 * 60 * 1000;
+  const live = normalizeVenue(venue);
+  return live.staff.map((person) => {
+    const punches = liveClocks(state.clocks).filter((c) => c.staffId === person.id && c.inAt >= from && c.inAt < to);
+    const ms = punches.reduce((sum, c) => sum + workedMs(c, at), 0);
+    const hours = Math.round((ms / 3600000) * 100) / 100;
+    return {
+      id: person.id,
+      name: person.name,
+      payRate: person.payRate,
+      hours,
+      pay: payDue(hours, person.payRate),
+      punches,
+      open: punches.some((c) => c.outAt == null),
+      onBreak: punches.some((c) => c.outAt == null && openBreak(c)),
+    };
+  });
+}
+
 export function clockIn(state, staff, now = Date.now()) {
   if (!staff?.id) return { ok: false, error: "Who is this?", state };
-  const clocks = (state.clocks ?? []).map((c) =>
-    c.staffId === staff.id && !c.outAt ? { ...c, outAt: now } : c
+  const onStaff = { id: staff.id, name: staff.name, role: staff.role ?? "any", at: now };
+  if (staff.id === "till") {
+    return { ok: true, error: null, state: { ...state, onStaff } };
+  }
+  const clocks = liveClocks(state.clocks).map((c) =>
+    c.staffId === staff.id && !c.outAt ? { ...closeBreaks(c, now), outAt: now } : c
   );
-  clocks.push({ staffId: staff.id, inAt: now, outAt: null });
+  clocks.push({ staffId: staff.id, inAt: now, outAt: null, breaks: [] });
   return {
     ok: true,
     error: null,
     state: {
       ...state,
-      onStaff: { id: staff.id, name: staff.name, role: staff.role ?? "any", at: now },
-      clocks: clocks.slice(-200),
+      onStaff,
+      clocks: liveClocks(clocks),
     },
   };
 }
 
 export function clockOut(state, now = Date.now()) {
   const id = state.onStaff?.id;
-  const clocks = (state.clocks ?? []).map((c) => (id && c.staffId === id && !c.outAt ? { ...c, outAt: now } : c));
+  const clocks = liveClocks(state.clocks).map((c) =>
+    id && c.staffId === id && !c.outAt ? { ...closeBreaks(c, now), outAt: now } : c
+  );
   return { ok: true, error: null, state: { ...state, onStaff: null, clocks } };
 }
 
 export function openClock(state, staffId) {
-  return (state.clocks ?? []).find((c) => c.staffId === staffId && !c.outAt) ?? null;
+  return liveClocks(state.clocks).find((c) => c.staffId === staffId && !c.outAt) ?? null;
 }
 
 export function whoIsClocked(state, venue) {
-  const ids = [...new Set((state.clocks ?? []).filter((c) => !c.outAt).map((c) => c.staffId))];
+  const ids = [...new Set(liveClocks(state.clocks).filter((c) => !c.outAt).map((c) => c.staffId))];
   return normalizeVenue(venue).staff.filter((p) => ids.includes(p.id));
 }
 
 export function punchIn(state, staff, now = Date.now()) {
   if (!staff?.id || staff.id === "till") return { ok: false, error: "Clock in as a person.", state };
-  const clocks = (state.clocks ?? []).map((c) => (c.staffId === staff.id && !c.outAt ? { ...c, outAt: now } : c));
-  clocks.push({ staffId: staff.id, inAt: now, outAt: null });
-  return { ok: true, error: null, state: { ...state, clocks: clocks.slice(-200) } };
+  const clocks = liveClocks(state.clocks).map((c) =>
+    c.staffId === staff.id && !c.outAt ? { ...closeBreaks(c, now), outAt: now } : c
+  );
+  clocks.push({ staffId: staff.id, inAt: now, outAt: null, breaks: [] });
+  return { ok: true, error: null, state: { ...state, clocks: liveClocks(clocks) } };
 }
 
 export function punchOut(state, staffId, now = Date.now()) {
   if (!staffId || staffId === "till") return { ok: false, error: "Clock out as a person.", state };
   if (!openClock(state, staffId)) return { ok: false, error: "Already out.", state };
-  const clocks = (state.clocks ?? []).map((c) => (c.staffId === staffId && !c.outAt ? { ...c, outAt: now } : c));
+  const clocks = liveClocks(state.clocks).map((c) =>
+    c.staffId === staffId && !c.outAt ? { ...closeBreaks(c, now), outAt: now } : c
+  );
   const onStaff = state.onStaff?.id === staffId ? null : state.onStaff;
   return { ok: true, error: null, state: { ...state, clocks, onStaff } };
+}
+
+export function startBreak(state, staffId, now = Date.now()) {
+  const open = openClock(state, staffId);
+  if (!open) return { ok: false, error: "Clock in first.", state };
+  if (openBreak(open)) return { ok: false, error: "Already on break.", state };
+  const clocks = liveClocks(state.clocks).map((c) =>
+    c.staffId === staffId && !c.outAt ? { ...c, breaks: [...c.breaks, { inAt: now, outAt: null }] } : c
+  );
+  return { ok: true, error: null, state: { ...state, clocks } };
+}
+
+export function endBreak(state, staffId, now = Date.now()) {
+  const open = openClock(state, staffId);
+  if (!open) return { ok: false, error: "Clock in first.", state };
+  if (!openBreak(open)) return { ok: false, error: "Not on break.", state };
+  const clocks = liveClocks(state.clocks).map((c) =>
+    c.staffId === staffId && !c.outAt ? closeBreaks(c, now) : c
+  );
+  return { ok: true, error: null, state: { ...state, clocks } };
 }
 
 export function openCheckForTable(checks, tableId) {
@@ -1399,7 +1547,7 @@ export function endNight(state, now = Date.now()) {
       lastBumpedChitId,
       guestClaims: {},
       bookings: pruneBookings(state.bookings ?? [], now),
-      clocks: (state.clocks ?? []).filter((c) => now - Number(c.inAt) < 7 * 24 * 60 * 60 * 1000),
+      clocks: keepClocks(state.clocks, now),
     },
   };
 }

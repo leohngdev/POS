@@ -506,7 +506,7 @@ export function SettingsView() {
 
       {tab === "night" ? (
         <>
-          <p className="till-muted">Clears paid tickets, seated claims, and guest phones still pulsing. Open unpaid checks stay. Receipts stay in History.</p>
+          <p className="till-muted">Clears paid tickets and seated claims. Open unpaid checks, tomorrow’s book, stock, and this week’s hours stay. Receipts stay in History.</p>
           <section className="till-night">
             <div>
               <span>Paid</span>

@@ -65,6 +65,13 @@ import {
   punchOut,
   openClock,
   whoIsClocked,
+  startBreak,
+  endBreak,
+  workedMs,
+  weekSheet,
+  patchStaff,
+  toggleOffDay,
+  payDue,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -920,5 +927,66 @@ describe("Roster", () => {
     const out = punchOut(inNow.state, who.id, 20);
     expect(out.state.clocks[0].outAt).toBe(20);
     expect(whoIsClocked(out.state, out.state.venue)).toHaveLength(0);
+  });
+
+  it("pays hours minus breaks, and keeps punches after end of night", () => {
+    const now = Date.now();
+    const maya = addStaff(createInitialState(), { name: "Maya", pin: "2222", payRate: 30 });
+    const who = maya.state.venue.staff[0];
+    expect(who.payRate).toBe(30);
+    const rated = patchStaff(maya.state, who.id, { payRate: 32 });
+    expect(rated.state.venue.staff[0].payRate).toBe(32);
+    const off = toggleOffDay(rated.state, who.id, 0);
+    expect(off.state.venue.staff[0].offDays).toEqual([0]);
+    const inNow = punchIn(off.state, who, now);
+    const pause = startBreak(inNow.state, who.id, now + 60 * 60 * 1000);
+    expect(pause.ok).toBe(true);
+    const back = endBreak(pause.state, who.id, now + 90 * 60 * 1000);
+    const out = punchOut(back.state, who.id, now + 2 * 60 * 60 * 1000);
+    expect(workedMs(out.state.clocks[0], now)).toBe(90 * 60 * 1000);
+    const sheet = weekSheet(out.state, out.state.venue, now);
+    expect(sheet[0].hours).toBe(1.5);
+    expect(sheet[0].pay).toBe(payDue(1.5, 32));
+    expect(sheet[0].pay).toBe(48);
+    const closed = endNight(out.state, now);
+    expect(closed.state.clocks[0].outAt).toBe(now + 2 * 60 * 60 * 1000);
+    const old = {
+      ...closed.state,
+      clocks: [
+        ...closed.state.clocks,
+        { staffId: who.id, inAt: now - 8 * 24 * 60 * 60 * 1000, outAt: now - 8 * 24 * 60 * 60 * 1000 + 3600000, breaks: [] },
+        { staffId: who.id, inAt: now - 92 * 24 * 60 * 60 * 1000, outAt: now - 92 * 24 * 60 * 60 * 1000 + 3600000, breaks: [] },
+      ],
+    };
+    const pruned = endNight(old, now);
+    expect(pruned.state.clocks.some((c) => c.inAt === now - 8 * 24 * 60 * 60 * 1000)).toBe(true);
+    expect(pruned.state.clocks.some((c) => c.inAt === now - 92 * 24 * 60 * 60 * 1000)).toBe(false);
+  });
+
+  it("closes an open break when they clock out", () => {
+    const who = { id: "maya", name: "Maya" };
+    const inNow = punchIn(createInitialState(), who, 1000);
+    const pause = startBreak(inNow.state, who.id, 2000);
+    const out = punchOut(pause.state, who.id, 4000);
+    expect(out.state.clocks[0].breaks[0].outAt).toBe(4000);
+    expect(workedMs(out.state.clocks[0])).toBe(1000);
+  });
+
+  it("does not age-prune punches until end of night", () => {
+    const who = { id: "maya", name: "Maya" };
+    const first = punchIn(createInitialState(), who, 10);
+    expect(first.state.clocks[0].inAt).toBe(10);
+    const out = punchOut(first.state, who.id, 20);
+    const again = punchIn(out.state, who, Date.now());
+    expect(again.state.clocks.some((c) => c.inAt === 10)).toBe(true);
+    expect(openClock(again.state, who.id).inAt).not.toBe(10);
+    const closed = endNight(again.state, Date.now());
+    expect(closed.state.clocks.some((c) => c.inAt === 10)).toBe(false);
+  });
+
+  it("door code unlock does not fill the hours book", () => {
+    const inNow = clockIn(createInitialState(), { id: "till", name: "Till", role: "any" }, 10);
+    expect(inNow.state.onStaff.id).toBe("till");
+    expect(inNow.state.clocks).toHaveLength(0);
   });
 });

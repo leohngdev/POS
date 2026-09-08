@@ -4,9 +4,10 @@ import { usePos } from "./PosProvider";
 import { printReceipt, ReceiptBody } from "./Receipt";
 
 export function HistoryView() {
-  const { state, venue } = usePos();
+  const { state, venue, closeNight } = usePos();
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [notice, setNotice] = useState(null);
   const receipts = state.receipts ?? [];
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -19,6 +20,10 @@ export function HistoryView() {
     });
   }, [q, receipts]);
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
+
+  function close() {
+    closeNight().then((r) => setNotice(r.ok ? "Night closed — hours stay on Roster" : r.error));
+  }
 
   return (
     <>
@@ -56,13 +61,20 @@ export function HistoryView() {
             <button type="button" className="till-primary" onClick={() => printReceipt(selected)}>
               Print receipt
             </button>
+            <button type="button" className="till-ghost" onClick={close}>
+              End of night
+            </button>
           </>
         ) : (
           <>
             <h2>{venue.name}</h2>
             <p className="till-muted">Nothing to reprint</p>
+            <button type="button" className="till-ghost" onClick={close}>
+              End of night
+            </button>
           </>
         )}
+        {notice ? <p className={notice.startsWith("Night") ? "till-ok" : "till-error"}>{notice}</p> : null}
       </aside>
     </>
   );

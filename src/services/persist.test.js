@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addStaff, clockIn, createInitialState, send, compactLines, claimTable } from "./pos";
+import { addStaff, clockIn, createInitialState, send, compactLines, claimTable, startBreak, toggleOffDay } from "./pos";
 import { VENUE } from "./venue";
 import { fromSnapshot, loadState, toSnapshot, writeStore, STORAGE_KEY } from "./persist";
 
@@ -174,21 +174,46 @@ describe("persist", () => {
   });
 
   it("keeps the week and clocks, not who is on this till", () => {
-    const maya = addStaff(createInitialState(), { name: "Maya", pin: "2222" });
+    const maya = addStaff(createInitialState(), { name: "Maya", pin: "2222", payRate: 32 });
     const id = maya.state.venue.staff[0].id;
+    const off = toggleOffDay(maya.state, id, 0);
     const inNow = clockIn(
-      { ...maya.state, shifts: [{ staffId: id, day: 5, serviceId: "dinner" }] },
-      maya.state.venue.staff[0],
+      { ...off.state, shifts: [{ staffId: id, day: 5, serviceId: "dinner" }] },
+      off.state.venue.staff[0],
       10
     );
-    const snap = toSnapshot(inNow.state);
+    const pause = startBreak(inNow.state, id, 15);
+    const snap = toSnapshot(pause.state);
+    expect(snap.schema).toBe(1);
     expect(snap.onStaff).toBeUndefined();
     expect(snap.shifts).toEqual([{ staffId: id, day: 5, serviceId: "dinner" }]);
     expect(snap.clocks[0].staffId).toBe(id);
+    expect(snap.clocks[0].breaks[0].inAt).toBe(15);
     expect(snap.venue.staff[0].name).toBe("Maya");
+    expect(snap.venue.staff[0].payRate).toBe(32);
+    expect(snap.venue.staff[0].offDays).toEqual([0]);
     const loaded = fromSnapshot(snap, createInitialState());
     expect(loaded.onStaff).toBeNull();
     expect(loaded.shifts[0].day).toBe(5);
     expect(loaded.clocks[0].inAt).toBe(10);
+    expect(loaded.clocks[0].breaks[0].outAt).toBeNull();
+    expect(loaded.venue.staff[0].payRate).toBe(32);
+    expect(loaded.venue.staff[0].offDays).toEqual([0]);
+  });
+
+  it("caps clocks at 400 without dropping by age", () => {
+    const now = Date.now();
+    const clocks = [
+      { staffId: "maya", inAt: 10, outAt: 20, breaks: [] },
+      ...Array.from({ length: 5 }, (_, i) => ({
+        staffId: "maya",
+        inAt: now + i,
+        outAt: now + i + 1,
+        breaks: [],
+      })),
+    ];
+    const snap = toSnapshot({ ...createInitialState(), clocks });
+    expect(snap.clocks.some((c) => c.inAt === 10)).toBe(true);
+    expect(snap.clocks).toHaveLength(6);
   });
 });

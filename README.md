@@ -1,6 +1,8 @@
 # Hospitality till
 
-React + Vite till: PIN, dine-in map, takeaway, FOH tickets, kitchen MORE chits, guest `#/order`.
+React + Vite till: PIN, dine-in map, takeaway, FOH tickets, kitchen MORE chits, guest `#/order`, staff `#/clock`. Hours, breaks, and a simple wage live on the venue snapshot — not a SQL database on this LAN.
+
+Restaurant OS first. A retail client comes after this venue is dogfood-real — not a theme on this till. Grocery is not this year.
 
 ## Run
 

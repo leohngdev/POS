@@ -45,3 +45,13 @@ When you ship work:
 ## Archetype
 
 - Active: `admin` canvas was the starting IA; product UI is now `src/features/till`
+
+## Product north star
+
+One venue, one vertical at a time.
+
+- **Now:** this till is a **restaurant OS** — check vs chit, floor, kitchen MORE, guest `#/order`, staff `#/clock`, hours on the venue snapshot. That is the wedge.
+- **Later:** extract a **kernel** (catalog, tax, tender, staff, hours, close, venue identity) and a **retail client** (counter sale, barcode, inventory — no tables). Boutique retail is a second face, not a flag on this till.
+- **Much later:** supermarket / grocery is a different scale (SKU volume, lanes, promotions, hardware, real DB). Not a theme. Not this year.
+
+Rules we already bought: one venue, the snapshot is the DB, no SQL until we leave one LAN, no processor yet, hide unused nav.

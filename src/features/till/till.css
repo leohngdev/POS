@@ -663,7 +663,6 @@
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
   margin: 0 0 var(--space-3);
-}
   background: var(--color-bg);
 }
 
@@ -1234,6 +1233,68 @@
   background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
 }
 
+.till-clock-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.till-clock-actions .till-primary,
+.till-clock-actions .till-ghost {
+  width: 100%;
+}
+
+.till-hours {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-4);
+}
+
+.till-hours th,
+.till-hours td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+
+.till-hours th:nth-child(2),
+.till-hours td:nth-child(2),
+.till-hours th:nth-child(3),
+.till-hours td:nth-child(3) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.till-hours tfoot th,
+.till-hours tfoot td {
+  border-bottom: 0;
+  padding-top: 12px;
+}
+
+.till-hours tbody tr {
+  cursor: pointer;
+}
+
+.till-hours tbody tr:hover td {
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
+}
+
+.till-hours tbody tr:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: -2px;
+}
+
+.till-hours tbody tr.on td,
+.till-hours tbody tr.on:hover td {
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+}
+
+.till-rate {
+  max-width: 120px;
+  margin-bottom: var(--space-3);
+}
+
 .till-week {
   display: grid;
   gap: 8px;
@@ -1267,6 +1328,12 @@
 .till-week-day.on {
   border-color: var(--color-text);
   background: color-mix(in srgb, var(--color-primary) 22%, var(--color-surface));
+  font-weight: 700;
+}
+
+.till-week-day.away {
+  border-color: var(--color-text);
+  background: color-mix(in srgb, var(--color-muted) 28%, var(--color-surface));
   font-weight: 700;
 }
 

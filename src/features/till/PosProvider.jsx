@@ -51,6 +51,12 @@ import {
   clockOut,
   punchIn as punchClockIn,
   punchOut as punchClockOut,
+  startBreak,
+  endBreak,
+  openBreak,
+  openClock,
+  patchStaff,
+  toggleOffDay,
   addStaff,
   removeStaff,
   addService,
@@ -369,6 +375,22 @@ export function PosProvider({ children }) {
         if (!who || who.id === "till") return { ok: false, error: "Use your own PIN.", state: latest };
         return punchClockOut(latest, who.id, Date.now());
       });
+    },
+    punchBreak(pin, staffId) {
+      return withSync((latest) => {
+        const who = matchUnlock(pin, latest.venue, staffId);
+        if (!who || who.id === "till") return { ok: false, error: "Use your own PIN.", state: latest };
+        const open = openClock(latest, who.id);
+        if (!open) return { ok: false, error: "Clock in first.", state: latest };
+        if (openBreak(open)) return endBreak(latest, who.id, Date.now());
+        return startBreak(latest, who.id, Date.now());
+      });
+    },
+    patchPerson(id, patch) {
+      return withSync((latest) => patchStaff(latest, id, patch));
+    },
+    flipOff(staffId, day) {
+      return withSync((latest) => toggleOffDay(latest, staffId, day));
     },
     addPerson(draft) {
       return withSync((latest) => addStaff(latest, draft));
