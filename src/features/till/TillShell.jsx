@@ -9,30 +9,13 @@ import { KitchenView } from "./KitchenView";
 import { SettingsView } from "./SettingsView";
 import { HistoryView } from "./HistoryView";
 import { usePos } from "./PosProvider";
-import { hasPendingGuestClaims } from "../../services/pos";
-
-const NAV = [
-  { id: "dine-in", label: "Dine in" },
-  { id: "book", label: "Book" },
-  { id: "takeaway", label: "Takeaway" },
-  { id: "tickets", label: "Tickets" },
-  { id: "kitchen", label: "Kitchen" },
-  { id: "stock", label: "Stock" },
-  { id: "roster", label: "Roster" },
-  { id: "history", label: "History" },
-  { id: "settings", label: "Settings" },
-];
+import { hasPendingGuestClaims, staffNav } from "../../services/pos";
 
 export function TillShell() {
   const [nav, setNav] = useState("dine-in");
   const { lock, syncStatus, state, venue } = usePos();
   const guestWaiting = hasPendingGuestClaims(state);
-  const items = NAV.filter((item) => {
-    if (item.id === "book" && venue.useBookings === false) return false;
-    if (item.id === "stock" && venue.useStock === false) return false;
-    if (item.id === "roster" && venue.useRoster === false) return false;
-    return true;
-  });
+  const items = staffNav(venue, state.onStaff);
   const current = items.some((item) => item.id === nav) ? nav : "dine-in";
   const wide = current === "kitchen" || current === "settings";
   const onName = state.onStaff?.name;

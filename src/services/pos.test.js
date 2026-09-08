@@ -57,6 +57,8 @@ import {
   stockCategories,
   addStaff,
   matchUnlock,
+  isBoss,
+  staffNav,
   toggleShift,
   rosterOn,
   clockIn,
@@ -69,9 +71,12 @@ import {
   endBreak,
   workedMs,
   weekSheet,
+  clockHome,
   patchStaff,
   toggleOffDay,
   payDue,
+  formatLiveClock,
+  formatDuration,
 } from "./pos";
 import { VENUE } from "./venue";
 
@@ -988,5 +993,81 @@ describe("Roster", () => {
     const inNow = clockIn(createInitialState(), { id: "till", name: "Till", role: "any" }, 10);
     expect(inNow.state.onStaff.id).toBe("till");
     expect(inNow.state.clocks).toHaveLength(0);
+  });
+
+  it("clock home reads the same hours book and off days", () => {
+    const now = Date.now();
+    const maya = addStaff(createInitialState(), { name: "Maya", pin: "2222", payRate: 32 });
+    const who = maya.state.venue.staff[0];
+    const off = toggleOffDay(maya.state, who.id, 1);
+    const inNow = punchIn(off.state, who, now - 90 * 60 * 1000);
+    const home = clockHome(inNow.state, inNow.state.venue, who.id, now);
+    expect(home.name).toBe("Maya");
+    expect(home.open).toBe(true);
+    expect(home.onBreak).toBe(false);
+    expect(home.offDays).toEqual([1]);
+    expect(home.hours).toBe(1.5);
+    expect(home.pay).toBe(48);
+    expect(home.shiftMs).toBe(90 * 60 * 1000);
+    expect(clockHome(inNow.state, inNow.state.venue, "nope")).toBeNull();
+    const pause = startBreak(inNow.state, who.id, now);
+    expect(clockHome(pause.state, pause.state.venue, who.id, now).onBreak).toBe(true);
+  });
+
+  it("formats the live punch clock", () => {
+    expect(formatLiveClock(new Date(2026, 8, 8, 14, 5, 7).getTime())).toBe("2:05:07pm");
+    expect(formatDuration(90 * 60 * 1000)).toBe("1h 30m");
+    expect(formatDuration(5 * 60 * 1000)).toBe("5m");
+    expect(formatDuration(2 * 60 * 60 * 1000)).toBe("2h");
+  });
+});
+
+describe("Till access", () => {
+  it("treats the till door as the boss till", () => {
+    expect(isBoss({ id: "till", name: "Till" })).toBe(true);
+    expect(isBoss({ id: "owen", name: "Owen" })).toBe(false);
+    expect(isBoss({ id: "leo", name: "Leo", boss: true })).toBe(true);
+    expect(isBoss(null)).toBe(false);
+  });
+
+  it("hides Settings, Roster, and Book on a named staff till", () => {
+    const venue = createInitialState().venue;
+    expect(staffNav(venue, { id: "till", name: "Till" }).map((i) => i.id)).toEqual([
+      "dine-in",
+      "book",
+      "takeaway",
+      "tickets",
+      "kitchen",
+      "stock",
+      "roster",
+      "history",
+      "settings",
+    ]);
+    expect(staffNav(venue, { id: "owen", name: "Owen" }).map((i) => i.id)).toEqual([
+      "dine-in",
+      "takeaway",
+      "tickets",
+      "kitchen",
+      "stock",
+      "history",
+    ]);
+  });
+
+  it("still hides unused nav on the boss till", () => {
+    const venue = { ...createInitialState().venue, useBookings: false, useStock: false, useRoster: false };
+    const ids = staffNav(venue, { id: "till", name: "Till" }).map((i) => i.id);
+    expect(ids).not.toContain("book");
+    expect(ids).not.toContain("stock");
+    expect(ids).not.toContain("roster");
+    expect(ids).toContain("settings");
+  });
+
+  it("copies an optional boss flag onto a named session", () => {
+    const added = addStaff(createInitialState(), { name: "Leo", pin: "3333", boss: true });
+    const who = matchUnlock("3333", added.state.venue, added.state.venue.staff[0].id);
+    expect(who.boss).toBe(true);
+    expect(isBoss(who)).toBe(true);
+    const inNow = clockIn(added.state, who, 1);
+    expect(inNow.state.onStaff.boss).toBe(true);
   });
 });

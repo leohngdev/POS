@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
-import { money } from "../../services/pos";
+import { isBoss, money } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { printReceipt, ReceiptBody } from "./Receipt";
+import { HISTORY_EMPTY, HISTORY_NONE, receiptWhen } from "./ticketsCopy";
 
 export function HistoryView() {
   const { state, venue, closeNight } = usePos();
+  const boss = isBoss(state.onStaff);
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -13,7 +15,8 @@ export function HistoryView() {
     const needle = q.trim().toLowerCase();
     if (!needle) return receipts;
     return receipts.filter((r) => {
-      const blob = [r.id, r.tableId, r.queueNumber, r.guestName, r.guestPhone, r.paidVia, r.venueName]
+      const when = receiptWhen(r);
+      const blob = [r.id, r.tableId, r.queueNumber, r.guestName, r.guestPhone, r.paidVia, r.venueName, when]
         .join(" ")
         .toLowerCase();
       return blob.includes(needle);
@@ -32,11 +35,11 @@ export function HistoryView() {
           <h1>History</h1>
           <label className="till-name till-find">
             Find
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Table, name, T-01" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Table, name, T-01, date" />
           </label>
         </div>
         {filtered.length === 0 ? (
-          <p className="till-empty">No receipts yet</p>
+          <p className="till-empty">{HISTORY_EMPTY}</p>
         ) : (
           <div className="till-ticket-row">
             {filtered.map((r) => (
@@ -47,7 +50,7 @@ export function HistoryView() {
                 onClick={() => setSelectedId(r.id)}
               >
                 <strong>{r.channel === "takeaway" ? r.queueNumber : `Table ${r.tableId}`}</strong>
-                <span>{r.guestName || r.paidVia || "Paid"}</span>
+                <span>{[r.guestName || r.paidVia || "Paid", receiptWhen(r)].filter(Boolean).join(" · ")}</span>
                 <span className="till-chip">{money(r.total)}</span>
               </button>
             ))}
@@ -61,17 +64,21 @@ export function HistoryView() {
             <button type="button" className="till-primary" onClick={() => printReceipt(selected)}>
               Print receipt
             </button>
-            <button type="button" className="till-ghost" onClick={close}>
-              End of night
-            </button>
+            {boss ? (
+              <button type="button" className="till-ghost" onClick={close}>
+                End of night
+              </button>
+            ) : null}
           </>
         ) : (
           <>
             <h2>{venue.name}</h2>
-            <p className="till-muted">Nothing to reprint</p>
-            <button type="button" className="till-ghost" onClick={close}>
-              End of night
-            </button>
+            <p className="till-muted">{HISTORY_NONE}</p>
+            {boss ? (
+              <button type="button" className="till-ghost" onClick={close}>
+                End of night
+              </button>
+            ) : null}
           </>
         )}
         {notice ? <p className={notice.startsWith("Night") ? "till-ok" : "till-error"}>{notice}</p> : null}

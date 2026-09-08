@@ -12,7 +12,7 @@ function Gate() {
   const clock = useClockRoute();
   if (guest.isGuest) return <GuestOrder initialTable={guest.tableId} />;
   if (clock) return <ClockPage />;
-  return state.unlocked ? <TillShell /> : <PinGate />;
+  return state.unlocked ? <TillShell key={state.onStaff?.id ?? "open"} /> : <PinGate />;
 }
 
 export default function App() {

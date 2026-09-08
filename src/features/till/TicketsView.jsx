@@ -19,6 +19,7 @@ import { ClaimActions } from "./ClaimActions";
 import { TableOps } from "./TableOps";
 import { OfferPad } from "./OfferPad";
 import { printReceipt } from "./Receipt";
+import { TICKETS_EMPTY_CONTEXT, TICKETS_PAID_HINT, TICKETS_PAID_NONE } from "./ticketsCopy";
 
 function TicketCard({ title, detail, chip, selected, claimed, collapsed, paid, onSelect }) {
   return (
@@ -148,8 +149,9 @@ export function TicketsView() {
               ))}
             </div>
             <h2>Paid</h2>
+            <p className="till-muted">{TICKETS_PAID_HINT}</p>
             <div className="till-ticket-row">
-              {paid.length === 0 ? <p className="till-muted">None yet</p> : null}
+              {paid.length === 0 ? <p className="till-muted">{TICKETS_PAID_NONE}</p> : null}
               {paid.map((check) => (
                 <TicketCard
                   key={check.id}
@@ -273,7 +275,7 @@ export function TicketsView() {
       ) : (
         <aside className="till-context">
           <h2>—</h2>
-          <p className="till-muted">Select a check</p>
+          <p className="till-muted">{TICKETS_EMPTY_CONTEXT}</p>
           <button type="button" className="till-primary" disabled>
             Card / Cash
           </button>

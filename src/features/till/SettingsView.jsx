@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DAYS, liveTables, liveZones, money, nightReport } from "../../services/pos";
+import { DAYS, isBoss, liveTables, liveZones, money, nightReport } from "../../services/pos";
 import { usePos } from "./PosProvider";
 import { FloorMap } from "./FloorMap";
 import { compressPhoto } from "./photo";
@@ -70,6 +70,21 @@ function MenuRow({ item, onPatch }) {
 }
 
 export function SettingsView() {
+  const { state } = usePos();
+  if (!isBoss(state.onStaff)) {
+    return (
+      <main className="till-workspace">
+        <div className="till-page-head">
+          <h1>Settings</h1>
+        </div>
+        <p className="till-muted">That's for whoever opened up with the till door.</p>
+      </main>
+    );
+  }
+  return <SettingsEditor />;
+}
+
+function SettingsEditor() {
   const {
     venue,
     state,

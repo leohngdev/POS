@@ -25,10 +25,10 @@ export function PinGate() {
   return (
     <div className="till-root till-gate">
       <div className="till-gate-box">
-        <p className="till-eyebrow">Staff till</p>
+        <p className="till-eyebrow">{who === "till" ? "Opening up" : "Staff till"}</p>
         <h1>{named && !who ? "Who’s on?" : "PIN"}</h1>
         {named && !who ? (
-          <p className="till-muted">Tap your name. The till door code is still there if you are opening up.</p>
+          <p className="till-muted">Tap your name. Till door is for opening up — Settings and Roster live there.</p>
         ) : (
           <p className="till-muted">{who && who !== "till" ? `Hi ${people.find((p) => p.id === who)?.name ?? ""}. Your PIN.` : "Unlock this till. Change the PIN in Settings."}</p>
         )}

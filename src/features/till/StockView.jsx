@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { stockCategories, stockGrouped, stockOnHand, toBuy } from "../../services/pos";
+import { isBoss, stockCategories, stockGrouped, stockOnHand, toBuy } from "../../services/pos";
 import { usePos } from "./PosProvider";
 
 function StockRow({ item, have, onCount, onRemove }) {
@@ -33,9 +33,11 @@ function StockRow({ item, have, onCount, onRemove }) {
         <button type="button" className="till-ghost" onClick={() => onCount(have + 1)} aria-label={`More ${item.name}`}>
           +
         </button>
-        <button type="button" className="till-ghost" onClick={onRemove}>
-          Remove
-        </button>
+        {onRemove ? (
+          <button type="button" className="till-ghost" onClick={onRemove}>
+            Remove
+          </button>
+        ) : null}
       </div>
     </li>
   );
@@ -54,6 +56,7 @@ export function StockView() {
     addShelf,
     dropShelf,
   } = usePos();
+  const boss = isBoss(state.onStaff);
   const [filter, setFilter] = useState(null);
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("bottle");
@@ -102,7 +105,7 @@ export function StockView() {
           </button>
         ))}
         </div>
-        {active !== "all" && groups.some((g) => g.name === active) ? (
+        {boss && active !== "all" && groups.some((g) => g.name === active) ? (
           <button
             type="button"
             className="till-ghost till-stock-unfile"
@@ -118,6 +121,7 @@ export function StockView() {
             Remove {active} shelf
           </button>
         ) : null}
+        {boss ? (
         <div className="till-offer-add">
           <input placeholder="Bar, Fridge, Dry" value={shelf} onChange={(e) => setShelf(e.target.value)} />
           <button
@@ -136,11 +140,14 @@ export function StockView() {
             Add shelf
           </button>
         </div>
+        ) : null}
         {items.length === 0 ? (
           <p className="till-empty">
             {active === "all"
-              ? "Nothing to count yet. Add soju, kimchi, napkins — whatever this kitchen actually tracks."
-              : `Nothing on ${active} yet. Add a line, or pick another shelf.`}
+              ? boss
+                ? "Nothing to count yet. Add soju, kimchi, napkins — whatever this kitchen actually tracks."
+                : "Nothing to count yet."
+              : `Nothing on ${active} yet.${boss ? " Add a line, or pick another shelf." : ""}`}
           </p>
         ) : (
           sections.map((section) => (
@@ -153,13 +160,15 @@ export function StockView() {
                     item={item}
                     have={stockOnHand(state, item.id)}
                     onCount={(qty) => countStock(item.id, qty)}
-                    onRemove={() => dropStockLine(item.id).then((r) => flash(r, "Removed"))}
+                    onRemove={boss ? () => dropStockLine(item.id).then((r) => flash(r, "Removed")) : null}
                   />
                 ))}
               </ul>
             </div>
           ))
         )}
+        {boss ? (
+        <>
         <h2>Add a line</h2>
         <div className="till-offer-add">
           <input placeholder="Soju" value={name} onChange={(e) => setName(e.target.value)} />
@@ -189,11 +198,15 @@ export function StockView() {
             Add
           </button>
         </div>
+        </>
+        ) : null}
         {notice ? (
           <p className={/^(Added|Removed|Order|In|Shelf)/.test(notice) ? "till-ok" : "till-error"}>{notice}</p>
         ) : null}
       </main>
       <aside className="till-book-pane">
+        {boss ? (
+          <>
         <h2>Buy</h2>
         {buy.length === 0 ? (
           <p className="till-muted">Nothing to buy. Count, or set a par on a line.</p>
@@ -245,6 +258,13 @@ export function StockView() {
             </ul>
           </>
         ) : null}
+          </>
+        ) : (
+          <>
+            <h2>Count</h2>
+            <p className="till-muted">Tap − / + for what’s on the shelf. Orders wait for whoever opened up with the till door.</p>
+          </>
+        )}
       </aside>
     </>
   );

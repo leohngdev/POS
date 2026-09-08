@@ -47,6 +47,7 @@ import {
   placeStockOrder,
   receiveOrderLine,
   matchUnlock,
+  isBoss,
   clockIn,
   clockOut,
   punchIn as punchClockIn,
@@ -202,6 +203,15 @@ export function PosProvider({ children }) {
     }
   }
 
+  function bossSync(apply) {
+    return withSync((latest) => {
+      if (!isBoss(latest.onStaff)) {
+        return { ok: false, error: "That's for the till door.", state: latest };
+      }
+      return apply(latest);
+    });
+  }
+
   const api = {
     state,
     venue,
@@ -264,52 +274,52 @@ export function PosProvider({ children }) {
       return withSync((latest) => undoLastBump(latest));
     },
     setVenueTaxes(patch) {
-      return withSync((latest) => ({ ok: true, error: null, state: updateVenueTaxes(latest, patch) }));
+      return bossSync((latest) => ({ ok: true, error: null, state: updateVenueTaxes(latest, patch) }));
     },
     renameVenue(name) {
-      return withSync((latest) => setVenueName(latest, name));
+      return bossSync((latest) => setVenueName(latest, name));
     },
     changePin(pin) {
-      return withSync((latest) => setPin(latest, pin));
+      return bossSync((latest) => setPin(latest, pin));
     },
     changeTableCount(count) {
-      return withSync((latest) => setTableCount(latest, count));
+      return bossSync((latest) => setTableCount(latest, count));
     },
     addFloorTable(id, zoneId, afterId) {
-      return withSync((latest) => addTable(latest, id, zoneId, afterId));
+      return bossSync((latest) => addTable(latest, id, zoneId, afterId));
     },
     removeFloorTable(id) {
-      return withSync((latest) => removeTable(latest, id));
+      return bossSync((latest) => removeTable(latest, id));
     },
     moveFloorTable(id, patch) {
-      return withSync((latest) => patchTable(latest, id, patch));
+      return bossSync((latest) => patchTable(latest, id, patch));
     },
     renameFloorTable(id, next) {
-      return withSync((latest) => renameTable(latest, id, next));
+      return bossSync((latest) => renameTable(latest, id, next));
     },
     reorderFloorTable(id, toIndex) {
-      return withSync((latest) => reorderTable(latest, id, toIndex));
+      return bossSync((latest) => reorderTable(latest, id, toIndex));
     },
     addFloorZone(name) {
-      return withSync((latest) => addZone(latest, name));
+      return bossSync((latest) => addZone(latest, name));
     },
     renameFloorZone(id, name) {
-      return withSync((latest) => renameZone(latest, id, name));
+      return bossSync((latest) => renameZone(latest, id, name));
     },
     removeFloorZone(id) {
-      return withSync((latest) => removeZone(latest, id));
+      return bossSync((latest) => removeZone(latest, id));
     },
     addDish(item) {
-      return withSync((latest) => addMenuItem(latest, item));
+      return bossSync((latest) => addMenuItem(latest, item));
     },
     patchDish(itemId, patch) {
-      return withSync((latest) => patchMenuItem(latest, itemId, patch));
+      return bossSync((latest) => patchMenuItem(latest, itemId, patch));
     },
     addVenueOffer(draft) {
-      return withSync((latest) => addOffer(latest, draft));
+      return bossSync((latest) => addOffer(latest, draft));
     },
     removeVenueOffer(id) {
-      return withSync((latest) => removeOffer(latest, id));
+      return bossSync((latest) => removeOffer(latest, id));
     },
     setCovers(checkId, covers) {
       return withSync((latest) => setCheckCovers(latest, checkId, covers));
@@ -324,43 +334,43 @@ export function PosProvider({ children }) {
       return withSync((latest) => removeCheckOffer(latest, checkId, offerId));
     },
     closeNight() {
-      return withSync((latest) => endNight(latest));
+      return bossSync((latest) => endNight(latest));
     },
     book(draft) {
-      return withSync((latest) => addBooking(latest, draft));
+      return bossSync((latest) => addBooking(latest, draft));
     },
     holdTable(bookingId, tableId) {
-      return withSync((latest) => patchBooking(latest, bookingId, { tableId }));
+      return bossSync((latest) => patchBooking(latest, bookingId, { tableId }));
     },
     seat(bookingId) {
-      return withSync((latest) => seatBooking(latest, bookingId, Date.now()));
+      return bossSync((latest) => seatBooking(latest, bookingId, Date.now()));
     },
     cancelBook(bookingId) {
-      return withSync((latest) => cancelBooking(latest, bookingId));
+      return bossSync((latest) => cancelBooking(latest, bookingId));
     },
     noShow(bookingId) {
-      return withSync((latest) => markNoShow(latest, bookingId));
+      return bossSync((latest) => markNoShow(latest, bookingId));
     },
     addStockLine(draft) {
-      return withSync((latest) => addStockItem(latest, draft));
+      return bossSync((latest) => addStockItem(latest, draft));
     },
     patchStockLine(id, patch) {
-      return withSync((latest) => patchStockItem(latest, id, patch));
+      return bossSync((latest) => patchStockItem(latest, id, patch));
     },
     dropStockLine(id) {
-      return withSync((latest) => removeStockItem(latest, id));
+      return bossSync((latest) => removeStockItem(latest, id));
     },
     countStock(id, qty) {
       return withSync((latest) => setStockCount(latest, id, qty, Date.now()));
     },
     receiveLine(id, qty) {
-      return withSync((latest) => receiveStock(latest, id, qty, Date.now()));
+      return bossSync((latest) => receiveStock(latest, id, qty, Date.now()));
     },
     orderStock() {
-      return withSync((latest) => placeStockOrder(latest, Date.now()));
+      return bossSync((latest) => placeStockOrder(latest, Date.now()));
     },
     takeOrderLine(orderId, itemId) {
-      return withSync((latest) => receiveOrderLine(latest, orderId, itemId, undefined, Date.now()));
+      return bossSync((latest) => receiveOrderLine(latest, orderId, itemId, undefined, Date.now()));
     },
     punchIn(pin, staffId) {
       return withSync((latest) => {
@@ -387,31 +397,34 @@ export function PosProvider({ children }) {
       });
     },
     patchPerson(id, patch) {
-      return withSync((latest) => patchStaff(latest, id, patch));
+      return bossSync((latest) => patchStaff(latest, id, patch));
     },
     flipOff(staffId, day) {
+      return bossSync((latest) => toggleOffDay(latest, staffId, day));
+    },
+    flipOwnOff(staffId, day) {
       return withSync((latest) => toggleOffDay(latest, staffId, day));
     },
     addPerson(draft) {
-      return withSync((latest) => addStaff(latest, draft));
+      return bossSync((latest) => addStaff(latest, draft));
     },
     dropPerson(id) {
-      return withSync((latest) => removeStaff(latest, id));
+      return bossSync((latest) => removeStaff(latest, id));
     },
     addMeal(name) {
-      return withSync((latest) => addService(latest, name));
+      return bossSync((latest) => addService(latest, name));
     },
     dropMeal(id) {
-      return withSync((latest) => removeService(latest, id));
+      return bossSync((latest) => removeService(latest, id));
     },
     flipShift(staffId, day, serviceId) {
-      return withSync((latest) => toggleShift(latest, staffId, day, serviceId));
+      return bossSync((latest) => toggleShift(latest, staffId, day, serviceId));
     },
     addShelf(name) {
-      return withSync((latest) => addStockGroup(latest, name));
+      return bossSync((latest) => addStockGroup(latest, name));
     },
     dropShelf(id) {
-      return withSync((latest) => removeStockGroup(latest, id));
+      return bossSync((latest) => removeStockGroup(latest, id));
     },
     claim(tableId) {
       return withSync((latest) => claimTable(latest, tableId, tablesOf(latest), Date.now()));

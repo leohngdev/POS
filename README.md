@@ -1,6 +1,6 @@
 # Hospitality till
 
-React + Vite till: PIN, dine-in map, takeaway, FOH tickets, kitchen MORE chits, guest `#/order`, staff `#/clock`. Hours, breaks, and a simple wage live on the venue snapshot — not a SQL database on this LAN.
+React + Vite till: PIN, dine-in map, takeaway, FOH tickets, kitchen MORE chits, guest `#/order`, staff `#/clock` (live time, hours, off days — PIN only to punch). Hours, breaks, and a simple wage live on the venue snapshot — not a SQL database on this LAN.
 
 Restaurant OS first. A retail client comes after this venue is dogfood-real — not a theme on this till. Grocery is not this year.
 
@@ -18,7 +18,7 @@ npm run build
 npm start
 ```
 
-That serves the till and `/api/snapshot` on port **4173** (override with `PORT`). Open the machine’s LAN IP, not only localhost. Starter PIN: `1234`.
+That serves the till and `/api/snapshot` on port **4173** (override with `PORT`). Open the machine’s LAN IP, not only localhost. Starter PIN: `1234` (till door = boss till). Tap a name for a staff till.
 
 ```bash
 npm test

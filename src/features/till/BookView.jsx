@@ -3,6 +3,7 @@ import {
   formatClock,
   formatDay,
   fromDateAndTime,
+  isBoss,
   liveZones,
   monthGrid,
   partyOnTable,
@@ -39,6 +40,21 @@ function ZoneChips({ zones, zoneId, onPick }) {
 }
 
 export function BookView() {
+  const { state } = usePos();
+  if (!isBoss(state.onStaff)) {
+    return (
+      <main className="till-workspace">
+        <div className="till-page-head">
+          <h1>Book</h1>
+        </div>
+        <p className="till-muted">That's for whoever opened up with the till door.</p>
+      </main>
+    );
+  }
+  return <BookEditor />;
+}
+
+function BookEditor() {
   const { state, venue, book, holdTable, seat, cancelBook, noShow } = usePos();
   const [at, setAt] = useState(() => Date.now());
   const [time, setTime] = useState(() => timeValue(Date.now()));

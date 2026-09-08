@@ -232,7 +232,7 @@ function normalizeStaff(raw) {
   if (!raw || !String(raw.name ?? "").trim()) return null;
   const pin = String(raw.pin ?? "").replace(/\D/g, "");
   if (pin.length < 4 || pin.length > 8) return null;
-  return {
+  const person = {
     id: String(raw.id || slugId(raw.name, [])),
     name: String(raw.name).trim(),
     pin,
@@ -242,6 +242,8 @@ function normalizeStaff(raw) {
       ? [...new Set(raw.offDays.map((n) => Number(n)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))]
       : [],
   };
+  if (raw.boss === true) person.boss = true;
+  return person;
 }
 
 export function defaultVenue() {
@@ -845,6 +847,43 @@ export function verifyPin(pin, venue) {
   return Boolean(matchUnlock(pin, venue, null));
 }
 
+function sessionWho(person) {
+  const who = { id: person.id, name: person.name, role: person.role ?? "any" };
+  if (person.boss === true) who.boss = true;
+  return who;
+}
+
+export const TILL_NAV = [
+  { id: "dine-in", label: "Dine in" },
+  { id: "book", label: "Book" },
+  { id: "takeaway", label: "Takeaway" },
+  { id: "tickets", label: "Tickets" },
+  { id: "kitchen", label: "Kitchen" },
+  { id: "stock", label: "Stock" },
+  { id: "roster", label: "Roster" },
+  { id: "history", label: "History" },
+  { id: "settings", label: "Settings" },
+];
+
+const BOSS_NAV = new Set(["book", "roster", "settings"]);
+
+export function isBoss(onStaff) {
+  if (!onStaff) return false;
+  return onStaff.id === "till" || onStaff.boss === true;
+}
+
+export function staffNav(venue, onStaff) {
+  const live = normalizeVenue(venue);
+  const boss = isBoss(onStaff);
+  return TILL_NAV.filter((item) => {
+    if (item.id === "book" && live.useBookings === false) return false;
+    if (item.id === "stock" && live.useStock === false) return false;
+    if (item.id === "roster" && live.useRoster === false) return false;
+    if (!boss && BOSS_NAV.has(item.id)) return false;
+    return true;
+  });
+}
+
 export function matchUnlock(pin, venue, staffId) {
   const digits = String(pin ?? "").replace(/\D/g, "");
   const live = normalizeVenue(venue);
@@ -855,10 +894,10 @@ export function matchUnlock(pin, venue, staffId) {
   if (staffId) {
     const person = live.staff.find((s) => s.id === staffId);
     if (!person || person.pin !== digits) return null;
-    return { id: person.id, name: person.name, role: person.role };
+    return sessionWho(person);
   }
   const person = live.staff.find((s) => s.pin === digits);
-  if (person) return { id: person.id, name: person.name, role: person.role };
+  if (person) return sessionWho(person);
   if (digits === live.pin) return { id: "till", name: "Till", role: "any" };
   return null;
 }
@@ -872,7 +911,7 @@ export function addStaff(state, draft) {
   if (pin === venue.pin) return { ok: false, error: "That is the till door code. Give them their own PIN.", state };
   if (venue.staff.some((s) => s.pin === pin)) return { ok: false, error: "Someone already has that PIN.", state };
   if (venue.staff.length >= 40) return { ok: false, error: "Forty people is the cap.", state };
-  const person = normalizeStaff({ name, pin, role: draft.role, payRate: draft.payRate });
+  const person = normalizeStaff({ name, pin, role: draft.role, payRate: draft.payRate, boss: draft.boss });
   if (!person) return { ok: false, error: "Name the person.", state };
   if (venue.staff.some((s) => s.id === person.id)) person.id = `${person.id}-${venue.staff.length + 1}`;
   return { ok: true, error: null, state: updateVenue(state, { staff: [...venue.staff, person] }) };
@@ -1050,9 +1089,31 @@ export function weekSheet(state, venue, at = Date.now()) {
   });
 }
 
+export function clockHome(state, venue, staffId, at = Date.now()) {
+  const live = normalizeVenue(venue);
+  const person = live.staff.find((s) => s.id === staffId) ?? null;
+  if (!person) return null;
+  const open = openClock(state, staffId);
+  const pausing = open ? openBreak(open) : null;
+  const row = weekSheet(state, live, at).find((r) => r.id === staffId);
+  return {
+    id: person.id,
+    name: person.name,
+    payRate: person.payRate,
+    offDays: [...person.offDays],
+    open: Boolean(open),
+    onBreak: Boolean(pausing),
+    inAt: open?.inAt ?? null,
+    breakAt: pausing?.inAt ?? null,
+    shiftMs: open ? workedMs(open, at) : 0,
+    hours: row?.hours ?? 0,
+    pay: row?.pay ?? 0,
+  };
+}
+
 export function clockIn(state, staff, now = Date.now()) {
   if (!staff?.id) return { ok: false, error: "Who is this?", state };
-  const onStaff = { id: staff.id, name: staff.name, role: staff.role ?? "any", at: now };
+  const onStaff = { ...sessionWho(staff), at: now };
   if (staff.id === "till") {
     return { ok: true, error: null, state: { ...state, onStaff } };
   }
@@ -1570,6 +1631,25 @@ export function formatClock(at) {
   const h12 = ((h + 11) % 12) + 1;
   const ap = h < 12 ? "am" : "pm";
   return m === "00" ? `${h12}${ap}` : `${h12}:${m}${ap}`;
+}
+
+export function formatLiveClock(at = Date.now()) {
+  const d = new Date(at);
+  const h = d.getHours();
+  const h12 = ((h + 11) % 12) + 1;
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  const ap = h < 12 ? "am" : "pm";
+  return `${h12}:${m}:${s}${ap}`;
+}
+
+export function formatDuration(ms) {
+  const total = Math.max(0, Math.floor(Number(ms) / 60000));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
 }
 
 export function daySlots(at, fromHour = 11, toHour = 22, stepMin = 15) {

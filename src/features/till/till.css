@@ -1453,3 +1453,158 @@
   .till-book-stage { grid-template-columns: 1fr; }
   .till-compact { grid-template-columns: 1fr; }
 }
+
+.clock-root {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--space-6);
+  display: grid;
+  gap: var(--space-4);
+  min-height: 100vh;
+  align-content: start;
+}
+
+.clock-root h1 {
+  margin-bottom: 0;
+}
+
+.clock-hero {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.clock-live {
+  margin: 0;
+  font-size: 52px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.clock-date {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.clock-me {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.clock-me h1 {
+  flex: 1;
+}
+
+.clock-status {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  width: fit-content;
+  font-size: 14px;
+}
+
+.clock-status.in {
+  border-color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 16%, var(--color-surface));
+}
+
+.clock-status.break {
+  background: color-mix(in srgb, var(--color-muted) 22%, var(--color-surface));
+}
+
+.clock-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.clock-stats.one {
+  grid-template-columns: 1fr;
+}
+
+.clock-stat {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.clock-stat span {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clock-stat b {
+  display: block;
+  margin-top: 4px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.clock-who-list {
+  display: grid;
+  gap: 8px;
+}
+
+.clock-who {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+
+.clock-who span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.clock-who.on {
+  border-color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+}
+
+.clock-who:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+.clock-off h2 {
+  margin: 0 0 var(--space-2);
+}
+
+.clock-off .till-week-days {
+  margin-top: var(--space-3);
+}
+
+.clock-today:not(.away) {
+  box-shadow: inset 0 0 0 1px var(--color-text);
+}
+
+.clock-root .till-primary {
+  width: 100%;
+}
+
+.clock-root .till-ghost {
+  margin-left: 0;
+}
+
+.clock-confirm {
+  display: grid;
+  gap: var(--space-2);
+}

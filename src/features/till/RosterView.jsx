@@ -1,10 +1,25 @@
 import { useState } from "react";
-import { DAYS, STAFF_ROLES, formatClock, money, openClock, weekSheet, whoIsClocked } from "../../services/pos";
+import { DAYS, STAFF_ROLES, formatClock, isBoss, money, openClock, weekSheet, whoIsClocked } from "../../services/pos";
 import { usePos } from "./PosProvider";
 
 const ROLE_LABEL = { floor: "Floor", kitchen: "Kitchen", any: "Anywhere" };
 
 export function RosterView() {
+  const { state } = usePos();
+  if (!isBoss(state.onStaff)) {
+    return (
+      <main className="till-workspace">
+        <div className="till-page-head">
+          <h1>This week</h1>
+        </div>
+        <p className="till-muted">That's for whoever opened up with the till door.</p>
+      </main>
+    );
+  }
+  return <RosterEditor />;
+}
+
+function RosterEditor() {
   const { state, venue, addPerson, dropPerson, addMeal, dropMeal, flipShift, patchPerson, flipOff } = usePos();
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
